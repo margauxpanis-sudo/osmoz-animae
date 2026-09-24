@@ -116,7 +116,10 @@ total_steps = sum(len(d["steps"]) for d in exported["days"])
 assert total_steps == 5, f"5 clients attendus dans l'export, trouvé {total_steps}"
 for d in exported["days"]:
     for step in d["steps"]:
-        assert set(step.keys()) == {"stop_id", "label", "client_name", "lieu", "arrival_min", "service_minutes", "phone", "notes"}
+        assert set(step.keys()) == {
+            "stop_id", "label", "client_name", "lieu", "arrival_min",
+            "service_minutes", "phone", "notes", "abonnement_annuel",
+        }
         assert step["phone"], f"téléphone manquant pour {step['label']} -- le rattachement Stop a dû échouer"
         assert step["client_name"], f"nom client manquant pour {step['label']}"
         assert step["lieu"], f"lieu manquant pour {step['label']}"

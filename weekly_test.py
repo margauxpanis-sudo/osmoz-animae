@@ -79,3 +79,37 @@ if __name__ == "__main__":
     assert max(spans) - min(spans) < sorted(r.span_min for r in r1.day_results.values() if r.steps)[-1], \
         "L'équilibrage devrait réduire l'écart entre le jour le plus chargé et le moins chargé."
     print("OK — l'équilibrage actif réduit bien l'écart entre jours par rapport au plafond seul.")
+
+    # -------------------------------------------------------------------
+    # Priorité "abonnement annuel" (25 sept. 2026) : sur une tournée
+    # volontairement TROP chargée pour caser tout le monde (un seul jour,
+    # plafond serré, deux gros clients qui ne rentrent pas ensemble), le
+    # client abonné doit être celui qu'on garde -- et le moteur doit
+    # renvoyer un résultat exploitable (feasible=False, missing_client_ids
+    # renseigné) plutôt que de planter, même au plafond le plus large fourni.
+    # -------------------------------------------------------------------
+    print("\n\n########## Priorité abonnement annuel (tournée volontairement surchargée) ##########")
+    # Plafond et durées choisis pour que CHAQUE client tienne seul dans le
+    # plafond (aller-retour dépôt inclus) mais que les DEUX ensemble ne
+    # tiennent plus (depot<->landerneau=65 et depot<->bodilis=80, distance
+    # landerneau<->bodilis=17 -- valeurs réelles déjà vérifiées ci-dessus) :
+    # seul : 65*2+180=310 ou 80*2+180=340, tous les deux <= 360 (plafond) ;
+    # ensemble : 65+17+80+180*2=522, très au-delà du plafond.
+    one_day = [DayConfig(0, "Jour unique", max_span_min=6 * 60)]
+    overloaded_clients = [
+        Stop("landerneau", "Landerneau (Caroline, abonnée)", 180, allowed_days=[0], abonnement_annuel=True),
+        Stop("bodilis", "Bodilis (Laetitia, non abonnée)", 180, allowed_days=[0], abonnement_annuel=False),
+    ]
+    r3 = solve_week(one_day, overloaded_clients, dist_fn, time_limit_s=5)
+    assert not r3.feasible, "ce cas doit être volontairement infaisable pour tout le monde à la fois"
+    assert r3.missing_client_ids == ["bodilis"], (
+        "le client SANS abonnement annuel doit être celui sacrifié, pas l'abonnée "
+        f"-- obtenu : {r3.missing_client_ids}"
+    )
+    print(f"OK — client(s) non casé(s) : {r3.missing_client_ids} (l'abonnée annuelle est bien conservée)")
+
+    print("\n########## Même cas, via solve_week_balanced (ne doit plus planter) ##########")
+    r4 = solve_week_balanced(one_day, overloaded_clients, dist_fn, search_time_limit_s=3, final_time_limit_s=5)
+    assert not r4.feasible
+    assert r4.missing_client_ids == ["bodilis"], r4.missing_client_ids
+    print("OK — solve_week_balanced renvoie un résultat partiel exploitable au lieu de planter.")

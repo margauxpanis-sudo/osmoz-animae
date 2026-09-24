@@ -114,6 +114,25 @@ def parse_window(text: str) -> tuple[StopWindow, bool]:
     return StopWindow(WindowType.NONE), False
 
 
+def parse_abonnement(text: str) -> tuple[bool, bool]:
+    """Interprète la réponse à la question "Abonnement annuel ?" (case à
+    cocher, ou oui/non selon le formulaire) en booléen. Renvoie
+    (abonnement, confident). Par prudence (même principe que les autres
+    parseurs de ce fichier) : un texte non reconnu est traité comme "non
+    abonné" plutôt que d'accorder à tort la protection anti-suppression de
+    Stop.abonnement_annuel (voir schema.py) -- mieux vaut relire un vrai
+    abonné à la main qu'accorder la priorité à qui ne l'a pas. Une réponse
+    absente (question pas encore posée sur ce formulaire, ou champ laissé
+    vide) est traitée comme "non abonné" sans avertissement -- c'est déjà
+    le comportement par défaut avant l'ajout de cette question."""
+    t = _norm(text)
+    if not t or t in ("non", "no", "false", "0", "aucun", "aucune"):
+        return False, True
+    if t in ("oui", "yes", "true", "1", "x", "coche", "abonnement annuel"):
+        return True, True
+    return False, False
+
+
 def map_days(text: str, tournee_dates: list[date]) -> tuple[list[int], list[str]]:
     """Convertit les jours cochés (ex. "Lundi, Mercredi") en indices de jour
     (position dans tournee_dates). ATTENTION : une tournée de plus de 7 jours
@@ -182,6 +201,7 @@ def import_responses(
         "jours": "Jours possibles sur la période",
         "contrainte": "Avez-vous une contrainte d'horaire ferme, ou juste une préférence ?",
         "remarques": "Remarques complémentaires",
+        "abonnement": "Abonnement annuel ?",
     }
     fmap = {**default_map, **(field_map or {})}
 
@@ -195,6 +215,7 @@ def import_responses(
         animaux_text = resp.get(fmap["animaux"], "")
         jours_text = resp.get(fmap["jours"], "")
         contrainte_text = resp.get(fmap["contrainte"], "")
+        abonnement_text = resp.get(fmap["abonnement"], "")
 
         prefix = f"Ligne {row_ref} ({nom})"
 
@@ -211,6 +232,13 @@ def import_responses(
             all_warnings.append(
                 f"{prefix} : contrainte horaire non reconnue dans '{contrainte_text}' — "
                 "traitée comme 'aucune contrainte' par défaut, à vérifier à la main."
+            )
+
+        abonnement, abonnement_confident = parse_abonnement(abonnement_text)
+        if not abonnement_confident:
+            all_warnings.append(
+                f"{prefix} : réponse 'Abonnement annuel ?' non reconnue dans '{abonnement_text}' — "
+                "traitée comme 'non abonné' par défaut, à vérifier à la main."
             )
 
         allowed_days, day_warnings = map_days(jours_text, tournee_dates)
@@ -237,6 +265,7 @@ def import_responses(
             notes=str(resp.get(fmap["remarques"], "")),
             address=lieu,
             client_name=nom,
+            abonnement_annuel=abonnement,
         ))
 
     return stops, all_warnings

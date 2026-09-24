@@ -22,6 +22,17 @@ ne cherche pas à étaler activement la charge. solve_week_balanced() ajoute
 abandonnée après vérification empirique qu'elle ne fonctionnait pas : ni le
 coefficient de coût linéaire renforcé, ni le coût quadratique au-delà d'un
 seuil, n'ont eu le moindre effet mesuré sur cette version d'OR-Tools).
+
+PRIORITÉ "abonnement annuel" (demande de Margaux, 24-25 sept. 2026 — voir
+Stop.abonnement_annuel dans schema.py) : quand une tournée est trop chargée
+pour caser tout le monde, même au plafond le plus large fourni, quelqu'un
+doit être sacrifié. Les clients abonnés à l'année ont une pénalité de
+disjonction bien plus élevée dans solve_week (PRIORITY_PENALTY vs
+BIG_PENALTY) -> ce sont les non-abonnés qui sautent en premier. Ce cas ne se
+produit qu'à la toute fin de la dichotomie de solve_week_balanced (au
+plafond le plus large) ; avant le 25 sept. 2026 il levait une exception
+brute (RuntimeError) au lieu de renvoyer un résultat partiel exploitable —
+corrigé le même jour (voir solve_week_balanced).
 """
 
 from __future__ import annotations
@@ -129,11 +140,28 @@ def solve_week(
 
     # Une seule copie visitée par client (disjonction, pénalité très forte pour
     # ne jamais laisser un client sans jour assigné en pratique).
+    #
+    # PRIORITÉ "abonnement annuel" (demande de Margaux, 24 sept. 2026 — voir
+    # Stop.abonnement_annuel dans schema.py) : quand la tournée est trop
+    # chargée pour caser tout le monde même au plafond le plus large
+    # (solve_week_balanced tombe alors sur ce cas), le solveur doit sacrifier
+    # en priorité les clients SANS abonnement annuel. Techniquement, la seule
+    # chose qui décide qui saute quand ce n'est pas possible pour tout le
+    # monde, c'est la pénalité de la disjonction : un client abonné a une
+    # pénalité bien plus élevée qu'un client non abonné, donc bien plus
+    # coûteux à laisser de côté -> le solveur préfère toujours écarter un non
+    # abonné en premier. Dans le cas normal (tout le monde peut être casé),
+    # cette différence ne change rien : BIG_PENALTY est déjà assez grand pour
+    # dominer tout coût de trajet réaliste, donc tout le monde est visité
+    # quel que soit le niveau de pénalité.
     BIG_PENALTY = 10_000_000
+    PRIORITY_PENALTY = 100_000_000
+    clients_by_id = {c.id: c for c in clients}
     for client_id, node_indices in copies_by_client.items():
         solver_indices = [manager.NodeToIndex(i) for i in node_indices]
+        penalty = PRIORITY_PENALTY if clients_by_id[client_id].abonnement_annuel else BIG_PENALTY
         # max_cardinality=1 : au plus une des copies (jours possibles) est visitée.
-        routing.AddDisjunction(solver_indices, BIG_PENALTY, 1)
+        routing.AddDisjunction(solver_indices, penalty, 1)
 
     for v in range(n_days):
         routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(routing.End(v)))
@@ -187,7 +215,10 @@ def solve_week(
                       f"(durée {step.service_minutes} min)")
             print(f"  -> retour dépôt estimé : {fmt(r.finish_min)}")
 
-        missing_labels = [c.label for c in clients if c.id in missing_ids]
+        missing_labels = [
+            (f"⭐{clients_by_id[cid].label}" if clients_by_id[cid].abonnement_annuel else clients_by_id[cid].label)
+            for cid in missing_ids
+        ]
         if missing_labels:
             print(f"\n⚠ Clients NON casés par le moteur (à vérifier à la main) : {missing_labels}")
         else:
@@ -201,8 +232,8 @@ def solve_week_balanced(
     clients: list[Stop],
     dist_fn,
     depot_label: str = "Camaret (dépôt)",
-    search_time_limit_s: int = 5,
-    final_time_limit_s: int = 20,
+    search_time_limit_s: int = 3,
+    final_time_limit_s: int = 10,
     resolution_min: int = 15,
     span_cost_coef: int = 100,
 ) -> WeekResult:
@@ -212,10 +243,20 @@ def solve_week_balanced(
     renforcé et coût quadratique au-delà d'un seuil essayés, AUCUN effet
     mesuré même à des valeurs extrêmes, vérifié sur un cas isolé avant
     d'abandonner la piste — on réutilise le seul mécanisme dont on a vérifié
-    qu'il fonctionne vraiment : le plafond dur par jour. On cherche par
-    dichotomie le plafond le plus bas qui reste faisable pour tous les
-    clients : par définition, c'est répartir le plus possible sans dépasser
-    ce qui est nécessaire."""
+    qu'il fonctionne vraiment : le plafond dur par jour.
+
+    Limites de temps volontairement resserrées (3s / recherche, 10s / calcul
+    final -- au lieu de 5s / 20s à l'origine) suite à des temps de calcul
+    mesurés jusqu'à 65s sur un cas de test à seulement 5 clients (25 sept.
+    2026) : la recherche par dichotomie enchaîne ~6 sous-appels, donc le pire
+    cas passe de ~50s à ~28s avec ces nouvelles limites. Compromis accepté :
+    équilibrage potentiellement un peu moins fin entre les jours, contre une
+    fiabilité bien meilleure côté interface (voir CALC_TIMEOUT_MS dans
+    revue_tournee.html, qui coupe l'attente à 90s côté navigateur).
+
+    On cherche par dichotomie le plafond le plus bas qui reste faisable pour
+    tous les clients : par définition, c'est répartir le plus possible sans
+    dépasser ce qui est nécessaire."""
     hard_caps = [d.max_span_min for d in days if d.max_span_min is not None]
     if not hard_caps:
         raise ValueError("Au moins un jour doit avoir un max_span_min défini pour chercher un plafond équilibré.")
@@ -231,10 +272,24 @@ def solve_week_balanced(
     lo = max(c.service_minutes for c in clients)
     hi = ceiling
     if not try_cap(hi).feasible:
-        raise RuntimeError(
-            f"Même le plafond le plus large fourni ({fmt(hi)}) ne suffit pas à caser tous les clients — "
-            "vérifier les jours possibles ou le nombre de jours disponibles."
+        # Tournée trop chargée pour caser tout le monde, même au plafond le
+        # plus large fourni. Jusqu'au 25 sept. 2026 ce cas levait une
+        # exception (RuntimeError) qui remontait telle quelle jusqu'à
+        # l'interface de Ludivine -- en plein outil "self-service", un plantage
+        # brut plutôt qu'un résultat exploitable. Décision de Margaux (même
+        # date) : renvoyer quand même un résultat partiel (WeekResult.feasible
+        # = False, missing_client_ids renseigné) pour que
+        # tournee_service.calculer_tournee le transforme en avertissement
+        # normal ("clients non casés, à traiter à la main") au lieu d'un
+        # crash -- exactement le rôle de Stop.abonnement_annuel /
+        # PRIORITY_PENALTY dans solve_week : ce sont alors en priorité les
+        # clients SANS abonnement annuel qui se retrouvent non casés.
+        final_days = [DayConfig(d.day_index, d.label, d.day_start_min, d.day_end_min, max_span_min=hi) for d in days]
+        print(
+            f"⚠ Même le plafond le plus large fourni ({fmt(hi)}) ne suffit pas à caser tous les clients — "
+            "les clients sans abonnement annuel sont sacrifiés en priorité (à traiter à la main)."
         )
+        return solve_week(final_days, clients, dist_fn, depot_label, final_time_limit_s, span_cost_coef, verbose=True)
 
     best_cap = hi
     while hi - lo > resolution_min:

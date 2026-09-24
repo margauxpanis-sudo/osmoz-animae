@@ -79,6 +79,16 @@ class Stop:
                                   # message WhatsApp inversé, nom et lieu échangés). Toujours
                                   # utiliser client_name/address directement en aval, jamais
                                   # re-parser label.
+    abonnement_annuel: bool = False  # case cochée au formulaire (demande de Margaux, 24 sept. 2026) --
+                                  # protège ce client d'être celui qu'on écarte en cas de tournée trop
+                                  # chargée pour tout le monde (voir weekly.py, PRIORITY_PENALTY) ;
+                                  # allowed_days reste par ailleurs la seule contrainte dure sur le
+                                  # jour, cochée ou non -- ceci ne fait jamais sortir un client d'un
+                                  # jour qu'il n'a pas coché.
+                                  # Rempli automatiquement par form_import.py (parse_abonnement) à
+                                  # partir de la question "Abonnement annuel ?" du formulaire -- une
+                                  # réponse absente ou non reconnue vaut "non abonné" (jamais deviné
+                                  # à tort, même principe que le reste de form_import.py).
 
 
 @dataclass

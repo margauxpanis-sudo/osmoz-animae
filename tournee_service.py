@@ -92,6 +92,7 @@ def export_for_interface(day_results: dict, clients_by_id: dict) -> dict:
                 "service_minutes": step.service_minutes,
                 "phone": client.phone,
                 "notes": client.notes,
+                "abonnement_annuel": client.abonnement_annuel,
             })
         days_out.append({
             "day_index": r.day_index,
@@ -140,11 +141,19 @@ def calculer_tournee(
     days = build_days(start_date, n_days, plafond)
     result = solve_week_balanced(days, stops, dist_fn, depot_label=depot)
 
-    if not result.feasible:
-        noms = ", ".join(next(s.label for s in stops if s.id == cid) for cid in result.missing_client_ids)
-        warnings.append(f"Clients NON casés par le moteur, à traiter à la main : {noms}")
-
     clients_by_id = {s.id: s for s in stops}
+    if not result.feasible:
+        # Les clients "abonnement annuel" sont protégés en priorité par le
+        # moteur (voir weekly.py, PRIORITY_PENALTY) -- s'ils apparaissent
+        # quand même ici, c'est que même la priorité n'a pas suffi (tournée
+        # bien trop chargée), donc à signaler très clairement à Ludivine.
+        missing_stops = [clients_by_id[cid] for cid in result.missing_client_ids]
+        noms = ", ".join(f"⭐{s.label}" if s.abonnement_annuel else s.label for s in missing_stops)
+        msg = f"Clients NON casés par le moteur, à traiter à la main : {noms}"
+        if any(s.abonnement_annuel for s in missing_stops):
+            msg += " (⭐ = abonnement annuel, normalement protégé en priorité)"
+        warnings.append(msg)
+
     exported = export_for_interface(result.day_results, clients_by_id)
     return exported, warnings
 

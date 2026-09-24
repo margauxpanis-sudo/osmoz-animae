@@ -1,3 +1,5 @@
+<!doctype html>
+<meta charset="utf-8">
 <title>Revue de tournée</title>
 <style>
   :root{
@@ -186,6 +188,14 @@
     color:var(--ink-soft);
   }
   .stop-main .phone{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+  .stop-main .sub-badge{
+    display:inline-block;
+    margin-top:4px;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.02em;
+    color:var(--leather-ink);
+  }
   .flag{
     display:none;
     margin-top:6px;
@@ -371,9 +381,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fjalla+One&family=Karla:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
 
 <div class="wrap">
-  <p class="eyebrow">Osmoz Animae · Moteur de tournée</p>
+  <p class="eyebrow" id="brandEyebrow">Osmoz Animae · Moteur de tournée</p>
   <h1 id="pageTitle">Revue de tournée</h1>
-  <p class="sub" id="pageSub">Proposition calculée automatiquement — jour, ordre et horaires.</p>
+  <p class="sub" id="pageSub">Charge un export du formulaire et calcule pour voir une proposition.</p>
 
   <div class="banner">
     <div class="dot"></div>
@@ -390,12 +400,16 @@
       <input type="text" id="apiUrlInput" placeholder="https://osmoz-animae-moteur.onrender.com">
       <label for="apiTokenInput">Jeton d'accès :</label>
       <input type="text" id="apiTokenInput" placeholder="fourni par Margaux">
+      <label for="brandNameInput">Nom affiché en haut de page :</label>
+      <input type="text" id="brandNameInput" placeholder="Osmoz Animae">
+      <label for="signerNameInput">Signature des messages client :</label>
+      <input type="text" id="signerNameInput" placeholder="Ludivine">
     </div>
   </details>
 
   <div class="panel">
     <h3>Nouvelle tournée</h3>
-    <p class="hint">Charge l'export du formulaire (menu « Osmoz Animae &gt; Exporter en JSON » dans la feuille de réponses, à télécharger depuis Google Drive), renseigne les dates et le dépôt, puis calcule.</p>
+    <p class="hint">Charge l'export du formulaire (menu « Exporter en JSON » du script installé dans la feuille de réponses, à télécharger depuis Google Drive), renseigne les dates et le dépôt, puis calcule.</p>
 
     <div class="field-row">
       <div class="field grow">
@@ -471,25 +485,6 @@
 
 <script>
 (function(){
-  // Exemple de sortie du moteur (weekly.py, solve_week_balanced) — 3 clients
-  // réels, distances déjà vérifiées à la main (voir prototype-moteur-optimisation.md).
-  // Affiché tant qu'aucun vrai fichier n'a été chargé via le sélecteur ci-dessus.
-  var SAMPLE_DATA = {
-    days: [
-      {day_index:0, label:"Jour 1 (exemple)", span_min:446, finish_min:1093, steps:[
-        {stop_id:"lannion", label:"Lannion (Les filles au Rulan)", client_name:"Les filles au Rulan", lieu:"Lannion", arrival_min:780, service_minutes:180, phone:""}
-      ]},
-      {day_index:1, label:"Jour 2 (exemple)", span_min:475, finish_min:835, steps:[
-        {stop_id:"bodilis", label:"Bodilis (Laetitia + Kerrous)", client_name:"Laetitia + Kerrous", lieu:"Bodilis", arrival_min:440, service_minutes:315, phone:""}
-      ]},
-      {day_index:2, label:"Jour 3 (exemple)", span_min:380, finish_min:740, steps:[
-        {stop_id:"saint_thegonnec", label:"Saint-Thégonnec (Aurore)", client_name:"Aurore", lieu:"Saint-Thégonnec", arrival_min:443, service_minutes:45, phone:""},
-        {stop_id:"plouaret", label:"Plouaret (Maïlys)", client_name:"Maïlys", lieu:"Plouaret", arrival_min:527, service_minutes:45, phone:""},
-        {stop_id:"landerneau", label:"Landerneau (Caroline)", client_name:"Caroline", lieu:"Landerneau", arrival_min:630, service_minutes:45, phone:""}
-      ]}
-    ]
-  };
-
   function fmt(m){
     var h = Math.floor(m/60), mn = Math.floor(m%60);
     return (h<10?"0":"")+h + "h" + (mn<10?"0":"")+mn;
@@ -522,7 +517,7 @@
       + dayLabel.toLowerCase() + " à " + fmt(step.arrival_min)
       + (lieu ? ", chez vous à " + lieu : "") + ".\n"
       + "Ça vous convient ? Dites-moi si besoin d'ajuster, sinon c'est validé de mon côté !\n"
-      + "Merci,\nLudivine";
+      + "Merci,\n" + ((signerNameInput && signerNameInput.value.trim()) || "Ludivine");
   }
 
   var statsEl = document.getElementById("stats");
@@ -582,6 +577,7 @@
       main.innerHTML = '<p class="label">'+step.label+'</p>'
         + '<div class="duration">'+dur(step.service_minutes)+' de soin</div>'
         + '<div class="phone">'+(step.phone ? step.phone : "Téléphone — à compléter")+'</div>'
+        + (step.abonnement_annuel ? '<div class="sub-badge">⭐ Abonnement annuel</div>' : '')
         + '<div class="flag">🌙 Nuit sur place ici</div>';
       row.appendChild(main);
 
@@ -643,7 +639,10 @@
     });
   }
 
-  render(SAMPLE_DATA);
+  // Rien à afficher tant qu'aucun calcul n'a été fait -- juste un message
+  // d'attente, pas de données d'exemple qui pourraient laisser croire
+  // qu'un calcul a déjà eu lieu.
+  daysEl.innerHTML = '<div class="day-empty" style="padding:18px 0;">Aucune tournée calculée pour l\'instant -- charge un export et clique "Calculer la tournée".</div>';
 
   var pageSubEl = document.getElementById("pageSub");
   var warningsBox = document.getElementById("warningsBox");
@@ -683,6 +682,34 @@
     document.getElementById("settingsDetails").setAttribute("open", "");
   }
 
+  // Nom affiché en haut de page + signature des messages client : réglages
+  // par navigateur eux aussi (comme l'adresse/le jeton ci-dessus), pour que
+  // chaque structure qui utilise ce même fichier puisse le personnaliser
+  // sans toucher au code -- pas besoin de dupliquer le fichier par pro.
+  // Valeurs par défaut = celles d'Osmoz Animae/Ludivine, pour ne rien casser
+  // pour l'usage actuel tant que personne n'a encore rempli ces champs.
+  var brandNameInput = document.getElementById("brandNameInput");
+  var signerNameInput = document.getElementById("signerNameInput");
+  var brandEyebrowEl = document.getElementById("brandEyebrow");
+  try{
+    brandNameInput.value = localStorage.getItem("osmoz_brand_name") || "Osmoz Animae";
+    signerNameInput.value = localStorage.getItem("osmoz_signer_name") || "Ludivine";
+  }catch(e){
+    brandNameInput.value = "Osmoz Animae";
+    signerNameInput.value = "Ludivine";
+  }
+  function updateBrandEyebrow(){
+    brandEyebrowEl.textContent = (brandNameInput.value.trim() || "Osmoz Animae") + " · Moteur de tournée";
+  }
+  updateBrandEyebrow();
+  brandNameInput.addEventListener("input", function(){
+    try{ localStorage.setItem("osmoz_brand_name", brandNameInput.value); }catch(e){}
+    updateBrandEyebrow();
+  });
+  signerNameInput.addEventListener("input", function(){
+    try{ localStorage.setItem("osmoz_signer_name", signerNameInput.value); }catch(e){}
+  });
+
   // Adresse du dépôt : simple mémo local (convenance par navigateur, jamais
   // transmis nulle part hors des appels au service de calcul qu'on déclenche
   // nous-mêmes) pour éviter de la retaper à chaque tournée.
@@ -698,12 +725,22 @@
     return (apiUrlInput.value || "").trim().replace(/\/+$/, "");
   }
 
+  // Filet de sécurité : le calcul (surtout /calculer, qui teste plusieurs
+  // réglages en interne pour équilibrer les jours) peut légitimement prendre
+  // plus d'une minute, mais ne doit jamais laisser Ludivine face à un écran
+  // qui tourne indéfiniment sans explication -- au-delà de ce délai, on
+  // arrête d'attendre et on affiche une erreur claire plutôt qu'un silence.
+  var CALC_TIMEOUT_MS = 90000;
+
   async function callApi(path, payload){
     var base = apiBase();
     if(!base){
       throw new Error("Renseigne d'abord l'adresse du service de calcul dans les réglages de connexion.");
     }
     var resp;
+    var controller = new AbortController();
+    var timedOut = false;
+    var timer = setTimeout(function(){ timedOut = true; controller.abort(); }, CALC_TIMEOUT_MS);
     try{
       resp = await fetch(base + path, {
         method: "POST",
@@ -712,9 +749,15 @@
           "Authorization": "Bearer " + (apiTokenInput.value || "").trim(),
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
     }catch(networkErr){
+      if(timedOut){
+        throw new Error("Le calcul prend trop de temps (plus de 90 secondes) -- le service est peut-être surchargé. Réessaie dans une minute ; si ça persiste, préviens Margaux.");
+      }
       throw new Error("Impossible de joindre le service de calcul. Vérifie ta connexion, ou réessaie dans une minute (le service peut mettre un peu de temps à démarrer après une pause).");
+    }finally{
+      clearTimeout(timer);
     }
     var data = null;
     try{ data = await resp.json(); }catch(e){}
@@ -795,7 +838,7 @@
       plafond: parseInt(plafondInput.value, 10) || 12,
     };
     calculerBtn.disabled = true;
-    calcStatusEl.textContent = "Calcul en cours… (jusqu'à une minute si le service vient de se réveiller)";
+    calcStatusEl.textContent = "Calcul en cours… (jusqu'à 1-2 minutes, surtout si le service vient de se réveiller)";
     calcStatusEl.classList.add("show");
     try{
       var result = await callApi("/calculer", {

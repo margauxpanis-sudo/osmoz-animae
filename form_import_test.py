@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from form_import import import_responses, map_days, parse_animal_count, parse_window
+from form_import import import_responses, map_days, parse_abonnement, parse_animal_count, parse_window
 from schema import WindowType
 
 # ---------------------------------------------------------------------------
@@ -47,6 +47,20 @@ for text, expected_type, expected_confident in cases_fenetre:
     print(f"  [{status}] '{text}' -> {w.type.value}, confident={confident} (attendu {expected_type.value}/{expected_confident})")
     assert (w.type, confident) == (expected_type, expected_confident), text
 
+cases_abonnement = [
+    ("Oui", True, True),
+    ("oui", True, True),
+    ("Non", False, True),
+    ("", False, True),           # question pas posée / laissée vide -> non abonné, sans ambiguïté
+    ("peut-être", False, False),  # motif inconnu -> ne doit PAS accorder la priorité par erreur
+]
+print("\n=== parse_abonnement ===")
+for text, expected_bool, expected_confident in cases_abonnement:
+    b, confident = parse_abonnement(text)
+    status = "OK" if (b, confident) == (expected_bool, expected_confident) else "FAIL"
+    print(f"  [{status}] '{text}' -> {b}, confident={confident} (attendu {expected_bool}/{expected_confident})")
+    assert (b, confident) == (expected_bool, expected_confident), text
+
 # ---------------------------------------------------------------------------
 # 2. Cas réel du 19 oct. 2026 : tournée de 8 jours, DEUX lundis (19 et 26)
 # ---------------------------------------------------------------------------
@@ -75,6 +89,7 @@ raw = [
         "Jours possibles sur la période": "Mercredi",
         "Avez-vous une contrainte d'horaire ferme, ou juste une préférence ?": "pas avant 15h",
         "Remarques complémentaires": "",
+        "Abonnement annuel ?": "Oui",
     },
     {
         "_row": 3, "Nom et prénom": "Julien Le Goff",
@@ -84,6 +99,9 @@ raw = [
         "Jours possibles sur la période": "Lundi, Mercredi",
         "Avez-vous une contrainte d'horaire ferme, ou juste une préférence ?": "aucune",
         "Remarques complémentaires": "",
+        # pas de clé "Abonnement annuel ?" du tout ici -> simule un ancien
+        # export de formulaire (question ajoutée après coup) : ne doit pas
+        # planter, ni produire un avertissement -- juste "non abonné".
     },
 ]
 five_day_tournee = [date(2026, 11, 2) + timedelta(days=i) for i in range(5)]  # lundi -> vendredi, pas de doublon
@@ -103,5 +121,12 @@ assert stops[1].service_minutes == 45  # valeur prudente (1 animal minimum) faut
 # c'est ce champ qui sera géocodé par ors_client.py -- jamais le label.
 assert stops[0].address == "Saint-Thégonnec", stops[0].address
 assert stops[1].address == "Landerneau", stops[1].address
+
+# abonnement_annuel doit être répercuté sur le Stop -- avec valeur par défaut
+# (non abonné) et sans avertissement quand la question n'a pas été posée.
+assert stops[0].abonnement_annuel is True, stops[0].abonnement_annuel
+assert stops[1].abonnement_annuel is False, stops[1].abonnement_annuel
+assert not any("Abonnement annuel" in w for w in warns), \
+    "l'absence de la question ne doit pas déclencher un avertissement"
 
 print("\nOK — tous les cas testés se comportent comme attendu.")
