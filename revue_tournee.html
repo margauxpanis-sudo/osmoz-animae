@@ -1,0 +1,979 @@
+<title>Revue de tournée</title>
+<style>
+  :root{
+    --bg:#EDE7D9;
+    --surface:#FBF8F1;
+    --surface-2:#F2ECDD;
+    --ink:#23291D;
+    --ink-soft:#54604C;
+    --pine:#2E4234;
+    --pine-ink:#1C2A20;
+    --leather:#8A5A3B;
+    --leather-ink:#6E4A31;
+    --amber:#B5762A;
+    --amber-bg:#F5E3C9;
+    --line:rgba(35,41,29,.14);
+    --line-strong:rgba(35,41,29,.28);
+    --on-pine:#F4F0E4;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#171C16;
+      --surface:#1F251D;
+      --surface-2:#242B21;
+      --ink:#EDE9DC;
+      --ink-soft:#AEB4A2;
+      --pine:#8FB89C;
+      --pine-ink:#B8D6BF;
+      --leather:#D3A17C;
+      --leather-ink:#E3BC9E;
+      --amber:#E3A85B;
+      --amber-bg:#3A2E17;
+      --line:rgba(237,233,220,.14);
+      --line-strong:rgba(237,233,220,.26);
+      --on-pine:#12160F;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#171C16;
+    --surface:#1F251D;
+    --surface-2:#242B21;
+    --ink:#EDE9DC;
+    --ink-soft:#AEB4A2;
+    --pine:#8FB89C;
+    --pine-ink:#B8D6BF;
+    --leather:#D3A17C;
+    --leather-ink:#E3BC9E;
+    --amber:#E3A85B;
+    --amber-bg:#3A2E17;
+    --line:rgba(237,233,220,.14);
+    --line-strong:rgba(237,233,220,.26);
+    --on-pine:#12160F;
+    color-scheme: dark;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Karla',system-ui,sans-serif;
+    padding-inline:20px;
+    padding-block:28px calc(48px + env(safe-area-inset-bottom,0px));
+  }
+  .wrap{max-width:760px;margin:0 auto;}
+
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--leather-ink);
+    margin:0 0 6px;
+  }
+  h1{
+    font-family:'Fjalla One',system-ui,sans-serif;
+    font-weight:400;
+    font-size:clamp(30px,6vw,42px);
+    letter-spacing:.01em;
+    margin:0 0 4px;
+    color:var(--pine-ink);
+    text-wrap:balance;
+  }
+  .sub{
+    color:var(--ink-soft);
+    font-size:15px;
+    margin:0 0 22px;
+  }
+
+  .banner{
+    display:flex;
+    gap:12px;
+    align-items:flex-start;
+    background:var(--amber-bg);
+    border:1px solid var(--line-strong);
+    border-radius:10px;
+    padding:14px 16px;
+    margin-bottom:28px;
+  }
+  .banner .dot{
+    flex:none;
+    width:9px;height:9px;border-radius:50%;
+    background:var(--amber);
+    margin-top:6px;
+  }
+  .banner strong{color:var(--ink);}
+  .banner p{margin:2px 0 0;font-size:14px;line-height:1.5;color:var(--ink-soft);}
+
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+    gap:10px;
+    margin-bottom:32px;
+  }
+  .stat{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 14px;
+  }
+  .stat .n{
+    font-family:'JetBrains Mono',monospace;
+    font-variant-numeric:tabular-nums;
+    font-size:22px;
+    color:var(--pine-ink);
+  }
+  .stat .l{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+
+  .day{
+    margin-bottom:26px;
+    border:1px solid var(--line);
+    border-radius:14px;
+    overflow:hidden;
+    background:var(--surface);
+  }
+  .day-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    gap:12px;
+    flex-wrap:wrap;
+    padding:16px 18px;
+    background:var(--pine);
+    color:var(--on-pine);
+  }
+  .day-head h2{
+    font-family:'Fjalla One',system-ui,sans-serif;
+    font-weight:400;
+    font-size:20px;
+    letter-spacing:.03em;
+    margin:0;
+  }
+  .day-meta{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    opacity:.85;
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+  }
+  .day-empty{padding:18px;color:var(--ink-soft);font-style:italic;font-size:14px;}
+
+  .stop{
+    display:grid;
+    grid-template-columns:76px 1fr auto;
+    gap:14px;
+    align-items:start;
+    padding:14px 18px;
+    border-top:1px solid var(--line);
+  }
+  .stop.overnight{background:var(--amber-bg);}
+  .time{
+    font-family:'JetBrains Mono',monospace;
+    font-variant-numeric:tabular-nums;
+    font-size:15px;
+    line-height:1.3;
+    color:var(--pine-ink);
+    padding-top:2px;
+  }
+  .time small{display:block;font-size:11px;color:var(--ink-soft);font-weight:400;}
+  .stop-main .label{font-size:15px;font-weight:700;margin:0 0 3px;}
+  .stop-main .duration{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+  }
+  .stop-main .phone{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+  .flag{
+    display:none;
+    margin-top:6px;
+    font-size:12px;
+    color:var(--amber);
+    font-weight:700;
+    letter-spacing:.02em;
+  }
+  .stop.overnight .flag{display:block;}
+
+  .actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
+  button{
+    font-family:'Karla',system-ui,sans-serif;
+    font-size:12.5px;
+    font-weight:700;
+    border-radius:7px;
+    padding:7px 11px;
+    cursor:pointer;
+    border:1px solid var(--line-strong);
+    background:var(--surface-2);
+    color:var(--ink);
+    white-space:nowrap;
+  }
+  button:hover{border-color:var(--pine-ink);}
+  button.on{background:var(--amber);border-color:var(--amber);color:#241800;}
+  button.ghost{background:transparent;}
+  button.copied{background:var(--pine);border-color:var(--pine);color:#F4F0E4;}
+
+  .msg{
+    grid-column:1 / -1;
+    margin-top:10px;
+    padding:12px 14px;
+    background:var(--surface-2);
+    border:1px dashed var(--line-strong);
+    border-radius:9px;
+    font-size:13.5px;
+    line-height:1.55;
+    white-space:pre-wrap;
+    display:none;
+  }
+  .msg.open{display:block;}
+
+  .footnote{
+    margin-top:20px;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    line-height:1.6;
+  }
+  @media (max-width:480px){
+    .stop{grid-template-columns:60px 1fr;}
+    .actions{grid-column:1 / -1;flex-direction:row;justify-content:flex-start;flex-wrap:wrap;margin-top:8px;}
+  }
+
+  .loader{
+    display:flex;
+    gap:12px;
+    align-items:center;
+    flex-wrap:wrap;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px 16px;
+    margin-bottom:22px;
+  }
+  .loader .txt{flex:1;min-width:180px;}
+  .loader .txt strong{display:block;font-size:14px;margin-bottom:2px;}
+  .loader .txt span{font-size:12.5px;color:var(--ink-soft);}
+  .file-btn{
+    font-family:'Karla',system-ui,sans-serif;
+    font-size:13px;
+    font-weight:700;
+    border-radius:7px;
+    padding:9px 14px;
+    cursor:pointer;
+    border:1px solid var(--pine);
+    background:var(--pine);
+    color:var(--on-pine);
+    white-space:nowrap;
+  }
+  .file-btn:hover{opacity:.9;}
+  .loader input[type=file]{display:none;}
+  .loader.loaded{border-color:var(--pine);}
+  .loader .status{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11.5px;
+    color:var(--pine-ink);
+    display:none;
+  }
+  .loader.loaded .status{display:block;}
+  .loader .err{
+    font-size:12.5px;
+    color:#B5432A;
+    display:none;
+  }
+  .loader.error .err{display:block;}
+
+  .depot{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom:22px;
+  }
+  .depot label{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
+  .depot input[type=text]{
+    flex:1;
+    min-width:200px;
+    font-family:'Karla',system-ui,sans-serif;
+    font-size:13.5px;
+    padding:8px 10px;
+    border-radius:7px;
+    border:1px solid var(--line-strong);
+    background:var(--surface);
+    color:var(--ink);
+  }
+
+  .export-row{
+    display:flex;
+    justify-content:flex-end;
+    margin-top:8px;
+  }
+
+  .settings{margin-bottom:18px;}
+  .settings summary{cursor:pointer;font-size:12.5px;color:var(--ink-soft);padding:6px 2px;}
+  .settings summary:hover{color:var(--ink);}
+  .settings-body{
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;margin-top:8px;
+  }
+  .settings-body label{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
+  .settings-body input[type=text]{
+    flex:1;min-width:160px;font-family:'Karla',system-ui,sans-serif;font-size:13px;
+    padding:7px 9px;border-radius:7px;border:1px solid var(--line-strong);
+    background:var(--surface-2);color:var(--ink);
+  }
+
+  .panel{
+    background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;margin-bottom:22px;
+  }
+  .panel h3{
+    font-family:'Fjalla One',system-ui,sans-serif;font-weight:400;font-size:16px;
+    margin:0 0 4px;color:var(--pine-ink);
+  }
+  .panel .hint{font-size:12.5px;color:var(--ink-soft);margin:0 0 14px;}
+  .field-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:12px;color:var(--ink-soft);}
+  .field input[type=text],.field input[type=date],.field input[type=number]{
+    font-family:'Karla',system-ui,sans-serif;font-size:13.5px;padding:8px 10px;
+    border-radius:7px;border:1px solid var(--line-strong);background:var(--surface);
+    color:var(--ink);min-width:150px;
+  }
+  .field.grow{flex:1;}
+  .field.grow input{width:100%;}
+  .primary-btn{
+    font-family:'Karla',system-ui,sans-serif;font-size:13.5px;font-weight:700;
+    border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid var(--pine);
+    background:var(--pine);color:var(--on-pine);white-space:nowrap;
+  }
+  .primary-btn:hover{opacity:.9;}
+  .primary-btn:disabled{opacity:.5;cursor:not-allowed;}
+  .calc-status{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--pine-ink);margin-top:8px;display:none;}
+  .calc-status.show{display:block;}
+  .calc-error{font-size:12.5px;color:#B5432A;margin-top:8px;display:none;}
+  .calc-error.show{display:block;}
+
+  .warnings{
+    background:var(--amber-bg);border:1px solid var(--line-strong);border-radius:10px;
+    padding:14px 16px;margin-bottom:22px;display:none;
+  }
+  .warnings.show{display:block;}
+  .warnings strong{display:block;margin-bottom:6px;font-size:13.5px;}
+  .warnings ul{margin:0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--ink-soft);}
+
+  details.advanced{margin-top:20px;}
+  details.advanced summary{cursor:pointer;font-size:12.5px;color:var(--ink-soft);padding:4px 2px;}
+  details.advanced summary:hover{color:var(--ink);}
+  .advanced-body{margin-top:10px;display:flex;flex-direction:column;gap:14px;}
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fjalla+One&family=Karla:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<div class="wrap">
+  <p class="eyebrow">Osmoz Animae · Moteur de tournée</p>
+  <h1 id="pageTitle">Revue de tournée</h1>
+  <p class="sub" id="pageSub">Proposition calculée automatiquement — jour, ordre et horaires.</p>
+
+  <div class="banner">
+    <div class="dot"></div>
+    <div>
+      <strong>Rien n'est envoyé tant que ce n'est pas relu ici.</strong>
+      <p>Vérifiez chaque jour, posez une nuitée si besoin, puis copiez le message de validation pour chaque client — l'envoi reste manuel, comme convenu.</p>
+    </div>
+  </div>
+
+  <details class="settings" id="settingsDetails">
+    <summary>Réglages de connexion (à faire une fois)</summary>
+    <div class="settings-body">
+      <label for="apiUrlInput">Adresse du service de calcul :</label>
+      <input type="text" id="apiUrlInput" placeholder="https://osmoz-animae-moteur.onrender.com">
+      <label for="apiTokenInput">Jeton d'accès :</label>
+      <input type="text" id="apiTokenInput" placeholder="fourni par Margaux">
+    </div>
+  </details>
+
+  <div class="panel">
+    <h3>Nouvelle tournée</h3>
+    <p class="hint">Charge l'export du formulaire (menu « Osmoz Animae &gt; Exporter en JSON » dans la feuille de réponses, à télécharger depuis Google Drive), renseigne les dates et le dépôt, puis calcule.</p>
+
+    <div class="field-row">
+      <div class="field grow">
+        <label for="rawExportInput">Export du formulaire (JSON)</label>
+        <input type="file" id="rawExportInput" accept="application/json,.json">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="debutInput">Date de début</label>
+        <input type="date" id="debutInput">
+      </div>
+      <div class="field">
+        <label for="joursInput">Nombre de jours</label>
+        <input type="number" id="joursInput" min="1" max="31" value="3">
+      </div>
+      <div class="field grow">
+        <label for="depotInput">Dépôt / point de départ</label>
+        <input type="text" id="depotInput" placeholder="ex. Penfrat, Camaret-sur-Mer">
+      </div>
+    </div>
+    <details class="advanced">
+      <summary>Réglage avancé : plafond d'heures/jour</summary>
+      <div class="field-row" style="margin-top:10px;">
+        <div class="field">
+          <label for="plafondInput">Plafond (heures)</label>
+          <input type="number" id="plafondInput" min="1" max="24" value="12">
+        </div>
+      </div>
+    </details>
+
+    <button class="primary-btn" id="calculerBtn">Calculer la tournée</button>
+    <div class="calc-status" id="calcStatus"></div>
+    <div class="calc-error" id="calcError"></div>
+  </div>
+
+  <div class="warnings" id="warningsBox">
+    <strong>⚠ À vérifier avant de faire confiance au calcul :</strong>
+    <ul id="warningsList"></ul>
+  </div>
+
+  <div class="stats" id="stats"></div>
+  <div id="days"></div>
+
+  <div class="export-row">
+    <button id="recalcBtn" class="primary-btn" disabled>Recalculer après nuitée</button>
+  </div>
+
+  <p class="footnote">
+    Une nuitée posée ci-dessus (« Nuit ici ») ne recalcule pas les horaires toute seule : posez la ou les nuitées nécessaires, puis cliquez « Recalculer après nuitée » — l'ordre et les horaires des jours suivants sont recalculés à partir du nouveau point de départ, sans jamais changer quel client est prévu quel jour.
+  </p>
+
+  <details class="advanced">
+    <summary>Options avancées (secours sans connexion au service, débogage)</summary>
+    <div class="advanced-body">
+      <div class="loader" id="loader">
+        <div class="txt">
+          <strong>Charger un résultat déjà calculé</strong>
+          <span id="loaderHint">Fichier JSON produit par <code>run_tournee.py</code> ou <code>recalculer_nuitees.py</code> en ligne de commande (ex. <code>tournee_calculee.json</code>).</span>
+          <span class="err" id="loaderErr"></span>
+          <span class="status" id="loaderStatus"></span>
+        </div>
+        <label class="file-btn" for="fileInput">Choisir un fichier…</label>
+        <input type="file" id="fileInput" accept="application/json,.json">
+      </div>
+      <div class="export-row" style="justify-content:flex-start;gap:10px;">
+        <button id="downloadResultBtn" class="ghost">Télécharger ce résultat (JSON)</button>
+        <button id="downloadDecisionsBtn" class="ghost">Télécharger les décisions (pour recalculer_nuitees.py)</button>
+      </div>
+    </div>
+  </details>
+</div>
+
+<script>
+(function(){
+  // Exemple de sortie du moteur (weekly.py, solve_week_balanced) — 3 clients
+  // réels, distances déjà vérifiées à la main (voir prototype-moteur-optimisation.md).
+  // Affiché tant qu'aucun vrai fichier n'a été chargé via le sélecteur ci-dessus.
+  var SAMPLE_DATA = {
+    days: [
+      {day_index:0, label:"Jour 1 (exemple)", span_min:446, finish_min:1093, steps:[
+        {stop_id:"lannion", label:"Lannion (Les filles au Rulan)", client_name:"Les filles au Rulan", lieu:"Lannion", arrival_min:780, service_minutes:180, phone:""}
+      ]},
+      {day_index:1, label:"Jour 2 (exemple)", span_min:475, finish_min:835, steps:[
+        {stop_id:"bodilis", label:"Bodilis (Laetitia + Kerrous)", client_name:"Laetitia + Kerrous", lieu:"Bodilis", arrival_min:440, service_minutes:315, phone:""}
+      ]},
+      {day_index:2, label:"Jour 3 (exemple)", span_min:380, finish_min:740, steps:[
+        {stop_id:"saint_thegonnec", label:"Saint-Thégonnec (Aurore)", client_name:"Aurore", lieu:"Saint-Thégonnec", arrival_min:443, service_minutes:45, phone:""},
+        {stop_id:"plouaret", label:"Plouaret (Maïlys)", client_name:"Maïlys", lieu:"Plouaret", arrival_min:527, service_minutes:45, phone:""},
+        {stop_id:"landerneau", label:"Landerneau (Caroline)", client_name:"Caroline", lieu:"Landerneau", arrival_min:630, service_minutes:45, phone:""}
+      ]}
+    ]
+  };
+
+  function fmt(m){
+    var h = Math.floor(m/60), mn = Math.floor(m%60);
+    return (h<10?"0":"")+h + "h" + (mn<10?"0":"")+mn;
+  }
+  function dur(m){
+    if(m < 60) return m + " min";
+    var h = Math.floor(m/60), mn = m%60;
+    return h + "h" + (mn?  (mn<10?"0":"")+mn : "");
+  }
+
+  var overnight = {};
+  try{
+    var saved = JSON.parse(localStorage.getItem("osmoz_overnight_flags") || "{}");
+    overnight = saved;
+  }catch(e){}
+  function saveFlags(){
+    try{ localStorage.setItem("osmoz_overnight_flags", JSON.stringify(overnight)); }catch(e){}
+  }
+
+  function waMessage(step, dayLabel){
+    // client_name et lieu sont TOUJOURS des champs séparés dans les données
+    // (jamais reconstruits en reparsant `label`) -- l'ordre "Lieu (Client)"
+    // vs "Client (Lieu)" a changé une fois entre le prototype et
+    // form_import.py, et un message envoyé avec le nom et le lieu inversés
+    // à un vrai client est le genre d'erreur qu'on ne veut vraiment pas
+    // découvrir après coup (bug trouvé et corrigé le 24 sept. 2026).
+    var client = step.client_name || step.label;
+    var lieu = step.lieu || "";
+    return "Bonjour " + client + ", voici votre créneau proposé pour la tournée : "
+      + dayLabel.toLowerCase() + " à " + fmt(step.arrival_min)
+      + (lieu ? ", chez vous à " + lieu : "") + ".\n"
+      + "Ça vous convient ? Dites-moi si besoin d'ajuster, sinon c'est validé de mon côté !\n"
+      + "Merci,\nLudivine";
+  }
+
+  var statsEl = document.getElementById("stats");
+  var daysEl = document.getElementById("days");
+  var currentData = null;
+
+  function render(DATA){
+    currentData = DATA;
+    statsEl.innerHTML = "";
+    daysEl.innerHTML = "";
+
+    var totalClients = 0, daysUsed = 0;
+    DATA.days.forEach(function(d){ if(d.steps.length){daysUsed++; totalClients += d.steps.length;} });
+
+    [["Clients", totalClients], ["Jours utilisés", daysUsed], ["Étalement max", (function(){
+        var m = Math.max.apply(null, DATA.days.map(function(d){return d.span_min||0;}));
+        return dur(m);
+      })()]
+    ].forEach(function(pair){
+      var div = document.createElement("div");
+      div.className = "stat";
+      div.innerHTML = '<div class="n">'+pair[1]+'</div><div class="l">'+pair[0]+'</div>';
+      statsEl.appendChild(div);
+    });
+
+    DATA.days.forEach(function(day){
+    var card = document.createElement("div");
+    card.className = "day";
+
+    var head = document.createElement("div");
+    head.className = "day-head";
+    head.innerHTML = '<h2>'+day.label+'</h2><div class="day-meta">'
+      + '<span>Étalement '+dur(day.span_min||0)+'</span>'
+      + (day.steps.length ? '<span>Retour ≈ '+fmt(day.finish_min)+'</span>' : '')
+      + '</div>';
+    card.appendChild(head);
+
+    if(!day.steps.length){
+      var empty = document.createElement("div");
+      empty.className = "day-empty";
+      empty.textContent = "Rien ce jour-là.";
+      card.appendChild(empty);
+    }
+
+    day.steps.forEach(function(step){
+      var row = document.createElement("div");
+      var key = day.day_index + ":" + step.stop_id;
+      row.className = "stop" + (overnight[key] ? " overnight" : "");
+
+      var time = document.createElement("div");
+      time.className = "time";
+      time.innerHTML = fmt(step.arrival_min) + "<small>→ "+fmt(step.arrival_min+step.service_minutes)+"</small>";
+      row.appendChild(time);
+
+      var main = document.createElement("div");
+      main.className = "stop-main";
+      main.innerHTML = '<p class="label">'+step.label+'</p>'
+        + '<div class="duration">'+dur(step.service_minutes)+' de soin</div>'
+        + '<div class="phone">'+(step.phone ? step.phone : "Téléphone — à compléter")+'</div>'
+        + '<div class="flag">🌙 Nuit sur place ici</div>';
+      row.appendChild(main);
+
+      var actions = document.createElement("div");
+      actions.className = "actions";
+
+      var toggleBtn = document.createElement("button");
+      toggleBtn.textContent = overnight[key] ? "Annuler la nuitée" : "Nuit ici";
+      if(overnight[key]) toggleBtn.classList.add("on");
+      toggleBtn.addEventListener("click", function(){
+        overnight[key] = !overnight[key];
+        saveFlags();
+        row.classList.toggle("overnight", !!overnight[key]);
+        toggleBtn.textContent = overnight[key] ? "Annuler la nuitée" : "Nuit ici";
+        toggleBtn.classList.toggle("on", !!overnight[key]);
+      });
+      actions.appendChild(toggleBtn);
+
+      var msgBtn = document.createElement("button");
+      msgBtn.className = "ghost";
+      msgBtn.textContent = "Message client";
+      var msgBox = document.createElement("div");
+      msgBox.className = "msg";
+      msgBox.textContent = waMessage(step, day.label);
+      msgBtn.addEventListener("click", function(){
+        msgBox.classList.toggle("open");
+      });
+      actions.appendChild(msgBtn);
+
+      var copyBtn = document.createElement("button");
+      copyBtn.className = "ghost";
+      copyBtn.textContent = "Copier";
+      copyBtn.addEventListener("click", function(){
+        var text = msgBox.textContent;
+        function done(){
+          copyBtn.textContent = "Copié ✓";
+          copyBtn.classList.add("copied");
+          setTimeout(function(){
+            copyBtn.textContent = "Copier";
+            copyBtn.classList.remove("copied");
+          }, 1600);
+        }
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(text).then(done).catch(function(){
+            msgBox.classList.add("open");
+          });
+        } else {
+          msgBox.classList.add("open");
+        }
+      });
+      actions.appendChild(copyBtn);
+
+      row.appendChild(actions);
+      row.appendChild(msgBox);
+      card.appendChild(row);
+    });
+
+      daysEl.appendChild(card);
+    });
+  }
+
+  render(SAMPLE_DATA);
+
+  var pageSubEl = document.getElementById("pageSub");
+  var warningsBox = document.getElementById("warningsBox");
+  var warningsList = document.getElementById("warningsList");
+
+  function showWarnings(list){
+    warningsList.innerHTML = "";
+    if(!list || !list.length){
+      warningsBox.classList.remove("show");
+      return;
+    }
+    list.forEach(function(w){
+      var li = document.createElement("li");
+      li.textContent = w;
+      warningsList.appendChild(li);
+    });
+    warningsBox.classList.add("show");
+  }
+
+  // Réglages de connexion (adresse du service Render + jeton) : mémo local
+  // par navigateur, à renseigner une seule fois (fourni par Margaux). Rouvre
+  // automatiquement le volet tant que rien n'est renseigné, pour que ce ne
+  // soit pas une étape cachée qu'on oublie de faire avant le premier calcul.
+  var apiUrlInput = document.getElementById("apiUrlInput");
+  var apiTokenInput = document.getElementById("apiTokenInput");
+  try{
+    apiUrlInput.value = localStorage.getItem("osmoz_api_url") || "";
+    apiTokenInput.value = localStorage.getItem("osmoz_api_token") || "";
+  }catch(e){}
+  apiUrlInput.addEventListener("input", function(){
+    try{ localStorage.setItem("osmoz_api_url", apiUrlInput.value); }catch(e){}
+  });
+  apiTokenInput.addEventListener("input", function(){
+    try{ localStorage.setItem("osmoz_api_token", apiTokenInput.value); }catch(e){}
+  });
+  if(!apiUrlInput.value){
+    document.getElementById("settingsDetails").setAttribute("open", "");
+  }
+
+  // Adresse du dépôt : simple mémo local (convenance par navigateur, jamais
+  // transmis nulle part hors des appels au service de calcul qu'on déclenche
+  // nous-mêmes) pour éviter de la retaper à chaque tournée.
+  var depotInput = document.getElementById("depotInput");
+  try{
+    depotInput.value = localStorage.getItem("osmoz_depot_address") || "";
+  }catch(e){}
+  depotInput.addEventListener("input", function(){
+    try{ localStorage.setItem("osmoz_depot_address", depotInput.value); }catch(e){}
+  });
+
+  function apiBase(){
+    return (apiUrlInput.value || "").trim().replace(/\/+$/, "");
+  }
+
+  async function callApi(path, payload){
+    var base = apiBase();
+    if(!base){
+      throw new Error("Renseigne d'abord l'adresse du service de calcul dans les réglages de connexion.");
+    }
+    var resp;
+    try{
+      resp = await fetch(base + path, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + (apiTokenInput.value || "").trim(),
+        },
+        body: JSON.stringify(payload),
+      });
+    }catch(networkErr){
+      throw new Error("Impossible de joindre le service de calcul. Vérifie ta connexion, ou réessaie dans une minute (le service peut mettre un peu de temps à démarrer après une pause).");
+    }
+    var data = null;
+    try{ data = await resp.json(); }catch(e){}
+    if(!resp.ok){
+      if(resp.status === 401){
+        throw new Error("Jeton d'accès invalide -- vérifie-le dans les réglages de connexion.");
+      }
+      throw new Error((data && data.detail) ? data.detail : ("Erreur du service de calcul (" + resp.status + ")."));
+    }
+    return data;
+  }
+
+  // --- Chargement de l'export brut du formulaire, en mémoire uniquement ---
+  var rawExportInput = document.getElementById("rawExportInput");
+  var currentRawExport = null; // liste brute {questions: réponses}, envoyée telle quelle à l'API
+  var currentParams = null;    // {debut, jours, depot} du dernier calcul réussi -- nécessaire pour "Recalculer après nuitée"
+
+  rawExportInput.addEventListener("change", function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      var parsed;
+      try{
+        parsed = JSON.parse(reader.result);
+      }catch(err){
+        currentRawExport = null;
+        calcErrorEl.textContent = "Fichier illisible : ce n'est pas du JSON valide.";
+        calcErrorEl.classList.add("show");
+        return;
+      }
+      if(!Array.isArray(parsed)){
+        currentRawExport = null;
+        calcErrorEl.textContent = "Format inattendu : ce fichier doit être l'export brut du formulaire (menu Apps Script \"Exporter en JSON\"), pas un résultat déjà calculé.";
+        calcErrorEl.classList.add("show");
+        return;
+      }
+      currentRawExport = parsed;
+      calcErrorEl.classList.remove("show");
+      calcStatusEl.textContent = "✓ " + file.name + " chargé (" + parsed.length + " réponse(s)) -- prêt à calculer.";
+      calcStatusEl.classList.add("show");
+    };
+    reader.onerror = function(){
+      currentRawExport = null;
+      calcErrorEl.textContent = "Impossible de lire ce fichier.";
+      calcErrorEl.classList.add("show");
+    };
+    reader.readAsText(file);
+  });
+
+  // --- "Calculer la tournée" : appelle l'API /calculer -- plus besoin de
+  // Terminal ni de Python installé, c'est ce qui manquait pour que Ludivine
+  // soit vraiment autonome. ---
+  var calculerBtn = document.getElementById("calculerBtn");
+  var calcStatusEl = document.getElementById("calcStatus");
+  var calcErrorEl = document.getElementById("calcError");
+  var debutInput = document.getElementById("debutInput");
+  var joursInput = document.getElementById("joursInput");
+  var plafondInput = document.getElementById("plafondInput");
+  var recalcBtn = document.getElementById("recalcBtn");
+
+  calculerBtn.addEventListener("click", async function(){
+    calcErrorEl.classList.remove("show");
+    if(!currentRawExport){
+      calcErrorEl.textContent = "Charge d'abord l'export du formulaire (fichier JSON) ci-dessus.";
+      calcErrorEl.classList.add("show");
+      return;
+    }
+    if(!debutInput.value || !joursInput.value || !depotInput.value.trim()){
+      calcErrorEl.textContent = "Renseigne la date de début, le nombre de jours et l'adresse du dépôt.";
+      calcErrorEl.classList.add("show");
+      return;
+    }
+    var params = {
+      debut: debutInput.value,
+      jours: parseInt(joursInput.value, 10),
+      depot: depotInput.value.trim(),
+      plafond: parseInt(plafondInput.value, 10) || 12,
+    };
+    calculerBtn.disabled = true;
+    calcStatusEl.textContent = "Calcul en cours… (jusqu'à une minute si le service vient de se réveiller)";
+    calcStatusEl.classList.add("show");
+    try{
+      var result = await callApi("/calculer", {
+        export_json: currentRawExport,
+        debut: params.debut, jours: params.jours, depot: params.depot, plafond: params.plafond,
+      });
+      currentParams = { debut: params.debut, jours: params.jours, depot: params.depot };
+      overnight = {}; // nouvelle tournée -> on repart d'une relecture propre
+      saveFlags();
+      render(result);
+      showWarnings(result.warnings);
+      recalcBtn.disabled = false;
+      calcStatusEl.textContent = "✓ Tournée calculée.";
+      calcStatusEl.classList.add("show");
+      pageSubEl.textContent = "Proposition calculée automatiquement — jour, ordre et horaires.";
+    }catch(err){
+      calcErrorEl.textContent = err.message;
+      calcErrorEl.classList.add("show");
+      calcStatusEl.classList.remove("show");
+    }finally{
+      calculerBtn.disabled = false;
+    }
+  });
+
+  // --- "Recalculer après nuitée" : appelle l'API /recalculer-nuitees avec
+  // l'export déjà en mémoire + les nuitées posées dans l'interface -- ne
+  // redécide jamais quel client va quel jour, uniquement l'ordre et les
+  // horaires. Remplace l'ancien aller-retour "télécharger les décisions
+  // -> relancer recalculer_nuitees.py à la main -> recharger le résultat". ---
+  recalcBtn.addEventListener("click", async function(){
+    calcErrorEl.classList.remove("show");
+    if(!currentData || !currentRawExport || !currentParams){
+      calcErrorEl.textContent = "Calcule d'abord une tournée complète (bouton \"Calculer la tournée\") avant de pouvoir recalculer après une nuitée.";
+      calcErrorEl.classList.add("show");
+      return;
+    }
+    var decisions = {
+      depot: currentParams.depot,
+      day_assignments: currentData.days.map(function(day){
+        return {
+          day_index: day.day_index,
+          stops: day.steps.map(function(step){
+            var key = day.day_index + ":" + step.stop_id;
+            return { stop_id: step.stop_id, overnight: !!overnight[key] };
+          }),
+        };
+      }),
+    };
+    recalcBtn.disabled = true;
+    calcStatusEl.textContent = "Recalcul en cours…";
+    calcStatusEl.classList.add("show");
+    try{
+      var result = await callApi("/recalculer-nuitees", {
+        export_json: currentRawExport,
+        decisions: decisions,
+        debut: currentParams.debut, jours: currentParams.jours, depot: currentParams.depot,
+      });
+      render(result);
+      showWarnings(result.warnings);
+      calcStatusEl.textContent = "✓ Recalcul terminé.";
+      calcStatusEl.classList.add("show");
+    }catch(err){
+      calcErrorEl.textContent = err.message;
+      calcErrorEl.classList.add("show");
+      calcStatusEl.classList.remove("show");
+    }finally{
+      recalcBtn.disabled = false;
+    }
+  });
+
+  // --- Options avancées : charger un résultat déjà calculé (secours CLI) ---
+  var loaderEl = document.getElementById("loader");
+  var loaderErrEl = document.getElementById("loaderErr");
+  var loaderStatusEl = document.getElementById("loaderStatus");
+
+  document.getElementById("fileInput").addEventListener("change", function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    loaderEl.classList.remove("error");
+    var reader = new FileReader();
+    reader.onload = function(){
+      var parsed;
+      try{
+        parsed = JSON.parse(reader.result);
+      }catch(err){
+        loaderEl.classList.add("error");
+        loaderErrEl.textContent = "Fichier illisible : ce n'est pas du JSON valide.";
+        return;
+      }
+      if(!parsed || !Array.isArray(parsed.days)){
+        loaderEl.classList.add("error");
+        loaderErrEl.textContent = "Format inattendu : le fichier doit contenir une clé \"days\" (sortie de run_tournee.py).";
+        return;
+      }
+      overnight = {}; // nouvelle tournée -> on repart d'une relecture propre
+      saveFlags();
+      render(parsed);
+      showWarnings(parsed.warnings);
+      // Chargé hors du bouton "Calculer" -> pas d'export brut ni de
+      // paramètres en mémoire pour ce résultat : "Recalculer après nuitée"
+      // (qui passe par l'API) redevient indisponible tant qu'un vrai calcul
+      // n'a pas été relancé -- le secours pour une nuitée dans ce cas reste
+      // recalculer_nuitees.py en ligne de commande.
+      currentRawExport = null;
+      currentParams = null;
+      recalcBtn.disabled = true;
+      loaderEl.classList.add("loaded");
+      loaderStatusEl.textContent = "✓ " + file.name + " chargé";
+      pageSubEl.textContent = "Proposition calculée automatiquement — jour, ordre et horaires.";
+    };
+    reader.onerror = function(){
+      loaderEl.classList.add("error");
+      loaderErrEl.textContent = "Impossible de lire ce fichier.";
+    };
+    reader.readAsText(file);
+  });
+
+  // --- Téléchargements (options avancées) : passent par la capacité
+  // "downloads" de la page publiée (un simple lien/blob ne fonctionne pas
+  // dans le lecteur d'artefact) -- window.claude.use("downloads") peut
+  // renvoyer null si indisponible dans cette vue, les boutons sont alors
+  // désactivés plutôt que de rester cassés silencieusement. ---
+  var downloadResultBtn = document.getElementById("downloadResultBtn");
+  var downloadDecisionsBtn = document.getElementById("downloadDecisionsBtn");
+  var downloadsApi = null;
+  (async function(){
+    try{
+      if(window.claude && typeof window.claude.use === "function"){
+        downloadsApi = await window.claude.use("downloads");
+      }
+    }catch(e){}
+    if(!downloadsApi){
+      downloadResultBtn.disabled = true;
+      downloadResultBtn.title = "Téléchargement indisponible dans cette vue.";
+      downloadDecisionsBtn.disabled = true;
+      downloadDecisionsBtn.title = "Téléchargement indisponible dans cette vue.";
+    }
+  })();
+
+  downloadResultBtn.addEventListener("click", async function(){
+    if(!currentData || !downloadsApi){ return; }
+    try{
+      await downloadsApi.save({
+        filename: "tournee_calculee.json",
+        data: JSON.stringify(currentData, null, 2),
+      });
+    }catch(e){}
+  });
+
+  // "Télécharger les décisions" : capture, pour chaque jour actuellement
+  // affiché, la liste des arrêts qui lui sont assignés et lequel (au plus
+  // un) est marqué "nuit ici" -- format attendu en entrée par
+  // recalculer_nuitees.py (secours en ligne de commande). Ne contient
+  // JAMAIS d'adresse/téléphone/fenêtre horaire : ces informations viennent
+  // de l'export du formulaire, relu directement par le script.
+  downloadDecisionsBtn.addEventListener("click", async function(){
+    if(!currentData || !downloadsApi){ return; }
+    var payload = {
+      depot: depotInput.value || null,
+      day_assignments: currentData.days.map(function(day){
+        return {
+          day_index: day.day_index,
+          stops: day.steps.map(function(step){
+            var key = day.day_index + ":" + step.stop_id;
+            return { stop_id: step.stop_id, overnight: !!overnight[key] };
+          }),
+        };
+      }),
+    };
+    try{
+      await downloadsApi.save({
+        filename: "decisions.json",
+        data: JSON.stringify(payload, null, 2),
+      });
+    }catch(e){
+      // Refusé ou annulé par la personne qui consulte la page -- rien à
+      // faire de plus, le bouton reste utilisable pour réessayer.
+    }
+  });
+})();
+</script>

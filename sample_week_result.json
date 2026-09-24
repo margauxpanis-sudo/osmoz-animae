@@ -1,0 +1,68 @@
+{
+  "days": [
+    {
+      "day_index": 0,
+      "label": "Jour 1",
+      "span_min": 446,
+      "finish_min": 1093,
+      "steps": [
+        {
+          "stop_id": "lannion",
+          "label": "Lannion (Les filles au Rulan)",
+          "arrival_min": 780,
+          "service_minutes": 180,
+          "phone": "",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "day_index": 1,
+      "label": "Jour 2",
+      "span_min": 475,
+      "finish_min": 835,
+      "steps": [
+        {
+          "stop_id": "bodilis",
+          "label": "Bodilis (Laetitia + Kerrous)",
+          "arrival_min": 440,
+          "service_minutes": 315,
+          "phone": "",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "day_index": 2,
+      "label": "Jour 3",
+      "span_min": 380,
+      "finish_min": 740,
+      "steps": [
+        {
+          "stop_id": "saint_thegonnec",
+          "label": "Saint-Thégonnec (Aurore)",
+          "arrival_min": 443,
+          "service_minutes": 45,
+          "phone": "",
+          "notes": ""
+        },
+        {
+          "stop_id": "plouaret",
+          "label": "Plouaret (Maïlys)",
+          "arrival_min": 527,
+          "service_minutes": 45,
+          "phone": "",
+          "notes": ""
+        },
+        {
+          "stop_id": "landerneau",
+          "label": "Landerneau (Caroline)",
+          "arrival_min": 630,
+          "service_minutes": 45,
+          "phone": "",
+          "notes": ""
+        }
+      ]
+    }
+  ]
+}
