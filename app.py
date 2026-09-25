@@ -18,20 +18,41 @@ forte, juste de quoi éviter qu'un inconnu qui tomberait sur l'URL ne
 déclenche des calculs et ne consomme le quota gratuit OpenRouteService.
 Proportionné à l'usage : un pilote à une seule utilisatrice, sur une page
 d'interface privée, pas un service public.
+
+Sert aussi l'interface elle-même (route "/", voir INTERFACE_PATH plus bas)
+-- ajouté le 26 sept. 2026 après découverte qu'une page publiée via l'outil
+Artefact de Claude a sa propre politique de sécurité (CSP) qui bloque tout
+appel réseau sortant vers un serveur externe comme celui-ci, quels que
+soient les réglages CORS de ce côté-ci : "Calculer la tournée" ne pouvait
+donc jamais fonctionner depuis le lien claude.ai/artifact/... (le blocage
+vient du navigateur/de la page Claude, pas de ce serveur). En servant
+revue_tournee.html directement depuis ce même service, la page et l'API
+sont sur la même origine -- plus aucune restriction cross-origin possible,
+et le lien à utiliser devient l'adresse Render elle-même plutôt que le lien
+d'artefact Claude (qui reste consultable mais n'est plus le lien à utiliser
+pour un vrai calcul).
 """
 
 from __future__ import annotations
 
 import os
 from datetime import date
+from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from tournee_service import TourneeError, calculer_tournee, recalculer_apres_nuitees
 
 app = FastAPI(title="Osmoz Animae — moteur de tournée")
+
+# Chemin vers l'interface, en dehors de engine/ (voir render.yaml, rootDir:
+# engine) -- calculé depuis l'emplacement de ce fichier plutôt que depuis le
+# répertoire de travail courant, pour ne pas dépendre de comment/où le
+# process est démarré.
+INTERFACE_PATH = Path(__file__).resolve().parent.parent / "interface" / "revue_tournee.html"
 
 # Ouvert à toute origine : pas de cookie/session côté serveur (le jeton
 # passe par un en-tête Authorization explicite, jamais par un cookie), donc
@@ -81,6 +102,16 @@ def _parse_debut(debut: str) -> date:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/")
+def interface():
+    # Sert le fichier tel quel -- aucune donnée injectée côté serveur, c'est
+    # toujours le navigateur qui charge l'export du formulaire et appelle
+    # /calculer, exactement comme avant. Seule différence : la page est
+    # maintenant sur la même origine que l'API (voir docstring en tête de
+    # fichier), donc plus de blocage CSP/cross-origin possible.
+    return FileResponse(INTERFACE_PATH, media_type="text/html")
 
 
 @app.post("/calculer")

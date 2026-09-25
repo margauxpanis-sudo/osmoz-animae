@@ -93,6 +93,7 @@ def export_for_interface(day_results: dict, clients_by_id: dict) -> dict:
                 "phone": client.phone,
                 "notes": client.notes,
                 "abonnement_annuel": client.abonnement_annuel,
+                "animals": client.animals,
             })
         days_out.append({
             "day_index": r.day_index,

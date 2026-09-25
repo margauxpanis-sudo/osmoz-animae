@@ -400,6 +400,10 @@
       <input type="text" id="apiUrlInput" placeholder="https://osmoz-animae-moteur.onrender.com">
       <label for="apiTokenInput">Jeton d'accès :</label>
       <input type="text" id="apiTokenInput" placeholder="fourni par Margaux">
+      <label for="agendaUrlInput">Adresse de l'agenda (script Google Agenda) :</label>
+      <input type="text" id="agendaUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
+      <label for="agendaTokenInput">Jeton de l'agenda :</label>
+      <input type="text" id="agendaTokenInput" placeholder="choisi au moment du déploiement du script">
       <label for="brandNameInput">Nom affiché en haut de page :</label>
       <input type="text" id="brandNameInput" placeholder="Osmoz Animae">
       <label for="signerNameInput">Signature des messages client :</label>
@@ -456,7 +460,10 @@
 
   <div class="export-row">
     <button id="recalcBtn" class="primary-btn" disabled>Recalculer après nuitée</button>
+    <button id="agendaBtn" class="ghost" disabled>Envoyer sur l'agenda</button>
   </div>
+  <div class="calc-status" id="agendaStatus"></div>
+  <div class="calc-error" id="agendaError"></div>
 
   <p class="footnote">
     Une nuitée posée ci-dessus (« Nuit ici ») ne recalcule pas les horaires toute seule : posez la ou les nuitées nécessaires, puis cliquez « Recalculer après nuitée » — l'ordre et les horaires des jours suivants sont recalculés à partir du nouveau point de départ, sans jamais changer quel client est prévu quel jour.
@@ -682,6 +689,22 @@
     document.getElementById("settingsDetails").setAttribute("open", "");
   }
 
+  // Même mémo local, pour l'adresse/le jeton du script Google Agenda
+  // (facultatif -- l'outil fonctionne sans, seul le bouton "Envoyer sur
+  // l'agenda" reste inactif tant que ce n'est pas renseigné).
+  var agendaUrlInput = document.getElementById("agendaUrlInput");
+  var agendaTokenInput = document.getElementById("agendaTokenInput");
+  try{
+    agendaUrlInput.value = localStorage.getItem("osmoz_agenda_url") || "";
+    agendaTokenInput.value = localStorage.getItem("osmoz_agenda_token") || "";
+  }catch(e){}
+  agendaUrlInput.addEventListener("input", function(){
+    try{ localStorage.setItem("osmoz_agenda_url", agendaUrlInput.value); }catch(e){}
+  });
+  agendaTokenInput.addEventListener("input", function(){
+    try{ localStorage.setItem("osmoz_agenda_token", agendaTokenInput.value); }catch(e){}
+  });
+
   // Nom affiché en haut de page + signature des messages client : réglages
   // par navigateur eux aussi (comme l'adresse/le jeton ci-dessus), pour que
   // chaque structure qui utilise ce même fichier puisse le personnaliser
@@ -818,6 +841,9 @@
   var joursInput = document.getElementById("joursInput");
   var plafondInput = document.getElementById("plafondInput");
   var recalcBtn = document.getElementById("recalcBtn");
+  var agendaBtn = document.getElementById("agendaBtn");
+  var agendaStatusEl = document.getElementById("agendaStatus");
+  var agendaErrorEl = document.getElementById("agendaError");
 
   calculerBtn.addEventListener("click", async function(){
     calcErrorEl.classList.remove("show");
@@ -851,6 +877,7 @@
       render(result);
       showWarnings(result.warnings);
       recalcBtn.disabled = false;
+      agendaBtn.disabled = false;
       calcStatusEl.textContent = "✓ Tournée calculée.";
       calcStatusEl.classList.add("show");
       pageSubEl.textContent = "Proposition calculée automatiquement — jour, ordre et horaires.";
@@ -898,6 +925,7 @@
       });
       render(result);
       showWarnings(result.warnings);
+      agendaBtn.disabled = false;
       calcStatusEl.textContent = "✓ Recalcul terminé.";
       calcStatusEl.classList.add("show");
     }catch(err){
@@ -906,6 +934,114 @@
       calcStatusEl.classList.remove("show");
     }finally{
       recalcBtn.disabled = false;
+    }
+  });
+
+  // --- "Envoyer sur l'agenda" : construit un événement par arrêt à partir
+  // de currentData (déjà relu à l'écran) + currentParams.debut (date de
+  // départ de la tournée), puis les envoie au script Google Agenda déployé
+  // sur le compte de Ludivine (bridge/creer_evenements_agenda.gs). Un clic
+  // après relecture, jamais automatique -- comme convenu avec Margaux le
+  // 25 sept. 2026. Indisponible tant qu'aucun calcul via l'API n'a eu lieu
+  // (currentParams est nécessaire pour connaître la date de départ ; un
+  // résultat chargé via "Options avancées" ne le fournit pas).
+  function buildAgendaEvents(){
+    var parts = (currentParams.debut || "").split("-").map(function(x){ return parseInt(x, 10); });
+    var startDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    var evenements = [];
+    currentData.days.forEach(function(day){
+      var d = new Date(startDate.getTime());
+      d.setDate(d.getDate() + day.day_index);
+      day.steps.forEach(function(step){
+        evenements.push({
+          stop_id: step.stop_id,
+          day_index: day.day_index,
+          titre: step.client_name || step.label,
+          lieu: step.lieu || "",
+          annee: d.getFullYear(),
+          mois: d.getMonth() + 1,
+          jour: d.getDate(),
+          debut_min: step.arrival_min,
+          fin_min: step.arrival_min + step.service_minutes,
+          animaux: step.animals || "",
+          telephone: step.phone || "",
+          notes: step.notes || "",
+          abonnement_annuel: !!step.abonnement_annuel,
+        });
+      });
+    });
+    return evenements;
+  }
+
+  // Volontairement SANS "Content-Type: application/json" explicite : Apps
+  // Script ne répond pas correctement au préflight OPTIONS qu'un tel en-tête
+  // déclencherait (requête "préflightée"). En laissant fetch poser son
+  // Content-Type par défaut (text/plain), la requête reste une requête
+  // "simple" -- pas de préflight -- et le script lit quand même le JSON à la
+  // main côté serveur (JSON.parse(e.postData.contents)). Même logique que
+  // pour le script du formulaire.
+  async function callAgenda(payload){
+    var url = (agendaUrlInput.value || "").trim();
+    if(!url){
+      throw new Error("Renseigne d'abord l'adresse de l'agenda dans les réglages de connexion.");
+    }
+    var resp;
+    try{
+      resp = await fetch(url, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    }catch(networkErr){
+      throw new Error("Impossible de joindre le script Google Agenda -- vérifie l'adresse dans les réglages de connexion, ou réessaie dans une minute.");
+    }
+    var data = null;
+    try{ data = await resp.json(); }catch(e){}
+    if(!data){
+      throw new Error("Réponse illisible du script Google Agenda -- vérifie qu'il est bien déployé en \"Application Web\", accès \"Tout le monde\".");
+    }
+    if(data.error){
+      throw new Error(data.error);
+    }
+    return data;
+  }
+
+  agendaBtn.addEventListener("click", async function(){
+    agendaErrorEl.classList.remove("show");
+    if(!currentData || !currentParams){
+      agendaErrorEl.textContent = "Calcule d'abord une tournée complète (bouton \"Calculer la tournée\") avant d'envoyer sur l'agenda.";
+      agendaErrorEl.classList.add("show");
+      return;
+    }
+    if(!agendaUrlInput.value.trim() || !agendaTokenInput.value.trim()){
+      agendaErrorEl.textContent = "Renseigne l'adresse et le jeton de l'agenda dans les réglages de connexion (voir bridge/creer_evenements_agenda.gs pour les obtenir).";
+      agendaErrorEl.classList.add("show");
+      return;
+    }
+    var evenements = buildAgendaEvents();
+    if(!evenements.length){
+      agendaErrorEl.textContent = "Aucun arrêt à envoyer sur l'agenda.";
+      agendaErrorEl.classList.add("show");
+      return;
+    }
+    agendaBtn.disabled = true;
+    agendaStatusEl.textContent = "Envoi vers l'agenda en cours…";
+    agendaStatusEl.classList.add("show");
+    try{
+      var result = await callAgenda({
+        token: agendaTokenInput.value.trim(),
+        evenements: evenements,
+      });
+      var parts2 = [(result.created || 0) + " événement(s) créé(s)"];
+      if(result.skipped) parts2.push(result.skipped + " déjà présent(s), ignoré(s)");
+      if(result.errors && result.errors.length) parts2.push(result.errors.length + " erreur(s) : " + result.errors.join(" ; "));
+      agendaStatusEl.textContent = "✓ " + parts2.join(", ") + ".";
+      agendaStatusEl.classList.add("show");
+    }catch(err){
+      agendaErrorEl.textContent = err.message;
+      agendaErrorEl.classList.add("show");
+      agendaStatusEl.classList.remove("show");
+    }finally{
+      agendaBtn.disabled = false;
     }
   });
 
@@ -945,6 +1081,7 @@
       currentRawExport = null;
       currentParams = null;
       recalcBtn.disabled = true;
+      agendaBtn.disabled = true;
       loaderEl.classList.add("loaded");
       loaderStatusEl.textContent = "✓ " + file.name + " chargé";
       pageSubEl.textContent = "Proposition calculée automatiquement — jour, ordre et horaires.";

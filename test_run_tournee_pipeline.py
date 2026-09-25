@@ -118,7 +118,7 @@ for d in exported["days"]:
     for step in d["steps"]:
         assert set(step.keys()) == {
             "stop_id", "label", "client_name", "lieu", "arrival_min",
-            "service_minutes", "phone", "notes", "abonnement_annuel",
+            "service_minutes", "phone", "notes", "abonnement_annuel", "animals",
         }
         assert step["phone"], f"téléphone manquant pour {step['label']} -- le rattachement Stop a dû échouer"
         assert step["client_name"], f"nom client manquant pour {step['label']}"
