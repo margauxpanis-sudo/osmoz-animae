@@ -100,6 +100,7 @@
   }
   .stat{
     background:var(--surface);
+    color:var(--ink);
     border:1px solid var(--line);
     border-radius:10px;
     padding:12px 14px;
@@ -118,6 +119,7 @@
     border-radius:14px;
     overflow:hidden;
     background:var(--surface);
+    color:var(--ink);
   }
   .day-head{
     display:flex;
@@ -212,6 +214,7 @@
     margin-top:10px;
     padding:12px 14px;
     background:var(--surface-2);
+    color:var(--ink);
     border:1px dashed var(--line-strong);
     border-radius:9px;
     font-size:13.5px;
@@ -238,6 +241,7 @@
     align-items:center;
     flex-wrap:wrap;
     background:var(--surface);
+    color:var(--ink);
     border:1px solid var(--line);
     border-radius:10px;
     padding:14px 16px;
@@ -306,7 +310,7 @@
   .settings summary:hover{color:var(--on-bg);}
   .settings-body{
     display:flex;gap:10px;flex-wrap:wrap;align-items:center;
-    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;
     padding:12px 14px;margin-top:8px;
   }
   .settings-body label{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
@@ -317,7 +321,7 @@
   }
 
   .panel{
-    background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:12px;
     padding:16px 18px;margin-bottom:22px;
   }
   .panel h3{
@@ -358,6 +362,15 @@
   details.advanced{margin-top:20px;}
   details.advanced summary{cursor:pointer;font-size:12.5px;color:var(--on-bg-soft);padding:4px 2px;}
   details.advanced summary:hover{color:var(--on-bg);}
+  /* Le bloc "Réglage avancé" de la carte "Nouvelle tournée" est imbriqué
+     dans .panel (fond crème) -- contrairement à "Options avancées" plus
+     bas, qui lui est directement sur le fond marine de la page. Même
+     classe .advanced, deux fonds différents : il faut donc deux couleurs
+     de texte différentes pour rester lisible dans les deux cas (bug
+     signalé par Margaux le 26 sept. -- texte crème sur fond crème,
+     invisible). */
+  .panel details.advanced summary{color:var(--ink-soft);}
+  .panel details.advanced summary:hover{color:var(--ink);}
   .advanced-body{margin-top:10px;display:flex;flex-direction:column;gap:14px;}
 </style>
 
