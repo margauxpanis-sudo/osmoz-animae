@@ -86,12 +86,21 @@ app.add_middleware(
 
 
 def _check_token(authorization: str | None) -> None:
-    expected = os.environ.get("API_TOKEN")
-    if not expected:
+    # API_TOKEN accepte plusieurs jetons valides, séparés par des virgules
+    # (ex. "jeton-ludivine,jeton-alexia") -- ajouté le 26 sept. 2026 pour
+    # accueillir une deuxième professionnelle sans partager un jeton unique
+    # entre deux personnes indépendantes (et pouvoir en révoquer un seul le
+    # jour où il faut couper l'accès d'une professionnelle sans toucher aux
+    # autres). Une seule valeur reste parfaitement valide (comportement
+    # historique inchangé).
+    expected_raw = os.environ.get("API_TOKEN")
+    if not expected_raw:
         # Pas de jeton configuré côté serveur -> on n'ouvre jamais l'accès
         # par erreur de configuration (on échoue fermé, jamais ouvert).
         raise HTTPException(status_code=500, detail="API_TOKEN non configuré côté serveur (voir Render > Environment).")
-    if not authorization or authorization != f"Bearer {expected}":
+    valid_tokens = {t.strip() for t in expected_raw.split(",") if t.strip()}
+    provided = authorization[len("Bearer "):] if authorization and authorization.startswith("Bearer ") else None
+    if not provided or provided not in valid_tokens:
         raise HTTPException(status_code=401, detail="Jeton invalide ou manquant (en-tête Authorization).")
 
 
@@ -101,6 +110,30 @@ class CalculerRequest(BaseModel):
     jours: int = Field(gt=0, le=31)
     depot: str
     plafond: int = 12
+    # Jours de semaine (ex. ["dimanche"]) à ne jamais proposer sur CETTE
+    # tournée -- réglage optionnel par calcul, jamais mémorisé (voir
+    # tournee_service._excluded_day_indices). Liste vide par défaut =
+    # comportement historique inchangé (tous les jours de la période restent
+    # utilisables).
+    jours_exclus: list[str] = Field(default_factory=list)
+    # Dates ISO ponctuelles (ex. ["2026-10-14"]) fermées sur CETTE tournée,
+    # en plus de jours_exclus -- les deux se cumulent (voir
+    # tournee_service._excluded_day_indices). Ajouté le 26 sept. 2026 pour
+    # le mode "consultations" (Ludivine en Alsace, absences ponctuelles qui
+    # ne suivent aucun motif hebdomadaire régulier).
+    dates_fermees: list[str] = Field(default_factory=list)
+    # Horaires de journée PROPRES à un jour de semaine (ex. {"mardi":
+    # {"debut": "09:00", "fin": "17:00"}}) -- remplace, pour ce jour-là
+    # uniquement, les horaires par défaut (6h-20h30). Ajouté le 26 sept.
+    # 2026 pour le mode "consultations" (rythme irrégulier selon le jour,
+    # contrairement aux tournées bretonnes classiques). Dict vide par
+    # défaut = comportement historique inchangé.
+    horaires_jours: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # "jours_semaine" (défaut, tournées classiques, cases à cocher
+    # lundi-dimanche) ou "dates_precises" (mode consultations, cases à
+    # cocher des dates précises du mois) -- voir
+    # tournee_service._JOURS_FIELD_BY_FORMAT et calculer_tournee.
+    format_dispo: str = "jours_semaine"
 
 
 class RecalculerRequest(BaseModel):
@@ -138,7 +171,10 @@ def calculer(body: CalculerRequest, authorization: str | None = Header(default=N
     _check_token(authorization)
     start_date = _parse_debut(body.debut)
     try:
-        exported, warnings = calculer_tournee(body.export_json, start_date, body.jours, body.depot, body.plafond)
+        exported, warnings = calculer_tournee(
+            body.export_json, start_date, body.jours, body.depot, body.plafond,
+            body.jours_exclus, body.dates_fermees, body.horaires_jours, body.format_dispo,
+        )
     except TourneeError as e:
         raise HTTPException(status_code=422, detail=str(e))
     exported["warnings"] = warnings

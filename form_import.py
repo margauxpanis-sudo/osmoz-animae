@@ -172,6 +172,49 @@ def map_days(text: str, tournee_dates: list[date]) -> tuple[list[int], list[str]
     return sorted(set(matched_indices)), warnings
 
 
+_DATE_RE = re.compile(r"\b(\d{1,2})[/\-](\d{1,2})\b")
+
+
+def map_dates(text: str, tournee_dates: list[date]) -> tuple[list[int], list[str]]:
+    """Équivalent de map_days, mais pour des DATES PRÉCISES cochées (ex.
+    "Mardi 06/10, Jeudi 08/10") plutôt que des noms de jour de semaine --
+    pensé pour le mode "consultations" (Ludivine en Alsace, formulaire
+    partagé sur un mois entier, 26 sept. 2026) : sur une période de
+    plusieurs semaines, "lundi" coché matcherait systématiquement PLUSIEURS
+    lundis (voir map_days, pensé pour une tournée de quelques jours où ce
+    cas est l'exception) -- ici chaque case cochée correspond à une seule
+    date, jamais deux fois le même jour/mois dans la période fournie, donc
+    AUCUNE ambiguïté n'est possible par construction (contrairement à
+    map_days, pas de cas "plusieurs indices pour un seul nom" à gérer).
+
+    Format attendu des cases du formulaire : jour/mois (ex. "06/10"),
+    éventuellement précédé du nom du jour de semaine (ex. "Mardi 06/10") --
+    peu importe, seul le motif jour/mois est recherché dans le texte."""
+    warnings: list[str] = []
+    t = _norm(text)
+    if not t:
+        return [], ["Aucune date possible renseignée."]
+
+    date_by_dm = {(d.day, d.month): i for i, d in enumerate(tournee_dates)}
+
+    matched_indices = []
+    unmatched = []
+    for jj, mm in _DATE_RE.findall(t):
+        key = (int(jj), int(mm))
+        if key in date_by_dm:
+            matched_indices.append(date_by_dm[key])
+        else:
+            unmatched.append(f"{int(jj):02d}/{int(mm):02d}")
+
+    if unmatched:
+        warnings.append(
+            f"Date(s) cochée(s) mais absente(s) de la période fournie : {', '.join(sorted(set(unmatched)))}."
+        )
+    if not matched_indices:
+        warnings.append(f"Aucune date reconnue dans le texte : '{text}'.")
+    return sorted(set(matched_indices)), warnings
+
+
 def _slug(text: str) -> str:
     t = _strip_accents(str(text)).lower()
     t = re.sub(r"[^a-z0-9]+", "_", t).strip("_")
@@ -182,6 +225,7 @@ def import_responses(
     raw_responses: list[dict],
     tournee_dates: list[date],
     field_map: dict[str, str] | None = None,
+    jours_format: str = "semaine",
 ) -> tuple[list[Stop], list[str]]:
     """Transforme l'export brut du pont Apps Script (une liste de dicts,
     une entrée par réponse, clés = intitulés exacts des questions) en liste
@@ -192,7 +236,14 @@ def import_responses(
     formulaire (qui peuvent varier légèrement d'une tournée à l'autre) aux
     noms de champs attendus ici : nom, telephone, lieu, animaux, jours,
     contrainte, remarques. Par défaut, suppose les intitulés du template
-    (pre-tournee-templates.md)."""
+    (pre-tournee-templates.md).
+
+    jours_format sélectionne l'interprétation du champ "jours" : "semaine"
+    (défaut, tournées classiques -- cases à cocher lundi à dimanche, voir
+    map_days) ou "dates" (mode consultations, cases à cocher des dates
+    précises du mois, voir map_dates) -- jamais mélangé, l'appelant
+    (tournee_service.calculer_tournee) choisit l'un ou l'autre selon
+    format_dispo, jamais les deux à la fois sur le même calcul."""
     default_map = {
         "nom": "Nom et prénom",
         "telephone": "Numéro de téléphone",
@@ -241,7 +292,10 @@ def import_responses(
                 "traitée comme 'non abonné' par défaut, à vérifier à la main."
             )
 
-        allowed_days, day_warnings = map_days(jours_text, tournee_dates)
+        if jours_format == "dates":
+            allowed_days, day_warnings = map_dates(jours_text, tournee_dates)
+        else:
+            allowed_days, day_warnings = map_days(jours_text, tournee_dates)
         for w in day_warnings:
             all_warnings.append(f"{prefix} : {w}")
         if not allowed_days:

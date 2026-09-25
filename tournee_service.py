@@ -33,6 +33,18 @@ from weekly import DEPOT_ID, solve_week_balanced
 # environnements -- d'où ce mapping manuel, fiable partout.
 _WEEKDAYS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 
+# Le champ "jours" du formulaire n'a pas le même intitulé ni le même sens
+# selon format_dispo (voir calculer_tournee) : "Jours possibles sur la
+# période" pour une tournée classique (cases à cocher lundi-dimanche,
+# interprétées par map_days), "Dates possibles sur la période" pour le mode
+# consultations (cases à cocher des dates précises du mois, interprétées
+# par map_dates) -- deux formulaires différents, jamais le même champ lu
+# avec le mauvais parseur.
+_JOURS_FIELD_BY_FORMAT = {
+    "jours_semaine": "Jours possibles sur la période",
+    "dates_precises": "Dates possibles sur la période",
+}
+
 DistFnFactory = Callable[[dict], Callable[[str, str], int]]
 
 
@@ -41,16 +53,134 @@ class TourneeError(Exception):
     quel à Ludivine, que ce soit dans un Terminal ou dans l'interface."""
 
 
-def build_days(start_date: date, n_days: int, max_span_h: int) -> list[DayConfig]:
-    return [
-        DayConfig(
+def _parse_hhmm(s: str) -> int:
+    """"HH:MM" -> minutes depuis minuit, avec une erreur métier claire (pas
+    un plantage brut) sur tout format inattendu -- même principe que le
+    reste du fichier : jamais deviner un horaire mal saisi."""
+    try:
+        hh, mm = str(s).strip().split(":")
+        h, m = int(hh), int(mm)
+        if not (0 <= h <= 23 and 0 <= m <= 59):
+            raise ValueError
+        return h * 60 + m
+    except (ValueError, AttributeError):
+        raise TourneeError(f"Horaire invalide : '{s}' (attendu HH:MM, ex. '09:00').")
+
+
+def _parse_dates_fermees(dates_fermees: list[str] | None) -> set[date]:
+    """Chaînes ISO ("AAAA-MM-JJ") -> objets date, avec erreur métier claire
+    sur tout format invalide plutôt qu'un plantage brut."""
+    parsed: set[date] = set()
+    for s in dates_fermees or []:
+        s = s.strip()
+        if not s:
+            continue
+        try:
+            parsed.add(date.fromisoformat(s))
+        except ValueError:
+            raise TourneeError(f"Date fermée invalide : '{s}' (attendu AAAA-MM-JJ).")
+    return parsed
+
+
+def _excluded_day_indices(
+    start_date: date,
+    n_days: int,
+    jours_exclus: list[str] | None,
+    dates_fermees: list[str] | None = None,
+) -> set[int]:
+    """Traduit deux réglages -- jours_exclus (motif récurrent par jour de
+    semaine, ex. ["dimanche"]) et dates_fermees (fermetures ponctuelles,
+    ex. ["2026-10-14"]) -- en day_index (décalage calendaire depuis
+    start_date) pour CETTE tournée précise. Les deux sont des réglages par
+    tournée, jamais mémorisés d'un calcul à l'autre, et se CUMULENT : un
+    jour exclu par l'un OU l'autre motif est exclu (demande de Margaux,
+    26 sept. 2026 -- le mode "consultations" en Alsace a besoin des deux à
+    la fois : un rythme hebdomadaire de base, plus des absences ponctuelles
+    qui ne suivent aucun motif régulier)."""
+    excluded: set[int] = set()
+
+    exclus_norm = {j.strip().lower() for j in (jours_exclus or []) if j.strip()}
+    if exclus_norm:
+        excluded |= {
+            i for i in range(n_days)
+            if _WEEKDAYS_FR[(start_date + timedelta(days=i)).weekday()] in exclus_norm
+        }
+
+    fermees = _parse_dates_fermees(dates_fermees)
+    if fermees:
+        excluded |= {
+            i for i in range(n_days)
+            if (start_date + timedelta(days=i)) in fermees
+        }
+
+    return excluded
+
+
+def _format_excluded_days(start_date: date, excluded: set[int]) -> str:
+    """Liste lisible des jours exclus (jour de semaine + date), pour les
+    messages d'avertissement/erreur -- peu importe que l'exclusion vienne
+    d'un motif hebdomadaire ou d'une date ponctuelle, ce qui compte pour
+    Ludivine c'est QUELS jours sont concernés."""
+    return ", ".join(
+        f"{_WEEKDAYS_FR[(start_date + timedelta(days=i)).weekday()].capitalize()} "
+        f"{(start_date + timedelta(days=i)).strftime('%d/%m')}"
+        for i in sorted(excluded)
+    )
+
+
+def build_days(
+    start_date: date,
+    n_days: int,
+    max_span_h: int,
+    jours_exclus: list[str] | None = None,
+    dates_fermees: list[str] | None = None,
+    horaires_jours: dict[str, tuple[int, int]] | None = None,
+) -> list[DayConfig]:
+    """Un DayConfig par jour calendaire de la période, SAUF les jours
+    exclus par jours_exclus ou dates_fermees (voir _excluded_day_indices) :
+    ceux-là sont absents de la liste renvoyée, day_index restant aligné sur
+    le décalage calendaire (donc pas forcément contigu --
+    solve_week/solve_week_balanced n'en ont pas besoin, voir weekly.py).
+
+    Pourquoi absent et pas "DayConfig à plafond 0" (première idée envisagée) :
+    solve_week_balanced calcule un plafond UNIQUE par dichotomie, appliqué à
+    TOUS les jours de la liste reçue (`ceiling = min(hard_caps)`, voir sa
+    docstring dans weekly.py) -- un jour à plafond 0 dans le lot ferait
+    chuter le plafond de TOUS les jours à 0 et rendrait la tournée entière
+    infaisable, pas seulement ce jour-là. L'omission pure évite ce piège.
+    Contrepartie : calculer_tournee doit aussi retirer ces day_index des
+    allowed_days de chaque client AVANT d'appeler le solveur (sinon un
+    client dont le seul jour coché tombe sur un jour exclu ferait planter
+    solve_week avec un day_by_index[d] introuvable).
+
+    horaires_jours (ex. {"mardi": (9*60, 17*60)}, déjà converti en minutes
+    par calculer_tournee) : horaires de journée PROPRES à un jour de
+    semaine donné, pour un rythme irrégulier (mode consultations, demande
+    de Margaux 26 sept. 2026 -- pas les mêmes horaires que les tournées
+    bretonnes classiques). Un jour de semaine absent de horaires_jours
+    garde les horaires par défaut de DayConfig (6h-20h30). Vérifié que ça
+    survit à l'équilibrage de solve_week_balanced : sa dichotomie ne
+    touche QUE max_span_min, elle reconstruit chaque DayConfig d'essai en
+    reprenant explicitement day_start_min/day_end_min du jour d'origine
+    (voir weekly.py, try_cap)."""
+    excluded = _excluded_day_indices(start_date, n_days, jours_exclus, dates_fermees)
+    horaires = horaires_jours or {}
+    days = []
+    for i in range(n_days):
+        if i in excluded:
+            continue
+        d = start_date + timedelta(days=i)
+        weekday_name = _WEEKDAYS_FR[d.weekday()]
+        kwargs = {}
+        if weekday_name in horaires:
+            kwargs["day_start_min"], kwargs["day_end_min"] = horaires[weekday_name]
+        days.append(DayConfig(
             day_index=i,
-            label=f"{_WEEKDAYS_FR[(start_date + timedelta(days=i)).weekday()].capitalize()} "
-                  f"{(start_date + timedelta(days=i)).strftime('%d/%m')}",
+            label=f"{weekday_name.capitalize()} {d.strftime('%d/%m')}",
             max_span_min=max_span_h * 60,
-        )
-        for i in range(n_days)
-    ]
+            **kwargs,
+        ))
+    return days
 
 
 def export_for_interface(day_results: dict, clients_by_id: dict) -> dict:
@@ -111,6 +241,10 @@ def calculer_tournee(
     n_days: int,
     depot: str,
     plafond: int = 12,
+    jours_exclus: list[str] | None = None,
+    dates_fermees: list[str] | None = None,
+    horaires_jours: dict[str, dict[str, str]] | None = None,
+    format_dispo: str = "jours_semaine",
     dist_fn_factory: DistFnFactory = _default_dist_fn_factory,
 ) -> tuple[dict, list[str]]:
     """Premier calcul complet : export brut du formulaire -> tournée
@@ -118,11 +252,75 @@ def calculer_tournee(
     passent une fabrique de test, sans appel réseau réel ; CLI et API
     utilisent ors_client.make_dist_fn par défaut).
 
+    format_dispo : "jours_semaine" (défaut, tournées classiques -- la
+    question du formulaire coche des jours de semaine, interprétée par
+    map_days) ou "dates_precises" (mode consultations -- Ludivine en
+    Alsace, formulaire partagé sur un mois entier, demande de Margaux
+    26 sept. 2026 -- la question coche des dates précises du mois,
+    interprétée par map_dates ; voir _JOURS_FIELD_BY_FORMAT pour le champ
+    de formulaire lu dans chaque cas). Jamais mélangé : une tournée
+    classique ne doit jamais être interprétée avec le parseur de dates, et
+    inversement -- l'un suppose une ambiguïté possible à lever (plusieurs
+    lundis dans la période), l'autre suppose l'inverse (chaque date est
+    unique par construction).
+
+    jours_exclus (ex. ["dimanche"]) et dates_fermees (ex. ["2026-10-14"]) :
+    jours à ne jamais proposer sur CETTE tournée précise -- réglages
+    optionnels, propres à ce calcul, qui se cumulent (voir
+    _excluded_day_indices). Un client dont le SEUL jour coché tombe sur un
+    jour exclu ne doit pas se fondre dans l'avertissement générique "sans
+    aucun jour exploitable" plus bas -- ce serait échouer silencieusement
+    sur la vraie cause -- d'où le traitement séparé ici, avant ce test
+    générique.
+
+    horaires_jours (ex. {"mardi": {"debut": "09:00", "fin": "17:00"}}) :
+    horaires de journée propres à un jour de semaine, pour un rythme
+    irrégulier (mode consultations) -- voir build_days. Un jour de semaine
+    absent garde les horaires par défaut (6h-20h30).
+
     Renvoie (résultat exportable pour l'interface, avertissements à
     afficher). Lève TourneeError pour tout échec métier."""
+    if format_dispo not in _JOURS_FIELD_BY_FORMAT:
+        raise TourneeError(
+            f"format_dispo invalide : '{format_dispo}' (attendu 'jours_semaine' ou 'dates_precises')."
+        )
+
+    horaires_min: dict[str, tuple[int, int]] = {}
+    for jour, hv in (horaires_jours or {}).items():
+        jour_norm = jour.strip().lower()
+        debut_min = _parse_hhmm(hv.get("debut", ""))
+        fin_min = _parse_hhmm(hv.get("fin", ""))
+        if debut_min >= fin_min:
+            raise TourneeError(
+                f"Horaires invalides pour {jour} : l'heure de début ({hv.get('debut')}) doit être "
+                f"avant l'heure de fin ({hv.get('fin')})."
+            )
+        horaires_min[jour_norm] = (debut_min, fin_min)
+
     tournee_dates = [start_date + timedelta(days=i) for i in range(n_days)]
-    stops, warnings = import_responses(raw_responses, tournee_dates)
+    stops, warnings = import_responses(
+        raw_responses, tournee_dates,
+        field_map={"jours": _JOURS_FIELD_BY_FORMAT[format_dispo]},
+        jours_format="dates" if format_dispo == "dates_precises" else "semaine",
+    )
     warnings = list(warnings)
+
+    excluded = _excluded_day_indices(start_date, n_days, jours_exclus, dates_fermees)
+    if excluded:
+        jours_exclus_lisible = _format_excluded_days(start_date, excluded)
+        vides_par_exclusion: set[str] = set()
+        for s in stops:
+            avait_des_jours = bool(s.allowed_days)
+            s.allowed_days = [d for d in s.allowed_days if d not in excluded]
+            if avait_des_jours and not s.allowed_days:
+                vides_par_exclusion.add(s.id)
+        if vides_par_exclusion:
+            noms = ", ".join(s.label for s in stops if s.id in vides_par_exclusion)
+            warnings.append(
+                f"Arrêt(s) écarté(s) du calcul : leur(s) seul(s) jour(s) coché(s) tombe(nt) "
+                f"uniquement sur (un) jour(s) exclu(s) de cette tournée ({jours_exclus_lisible}) : {noms}"
+            )
+            stops = [s for s in stops if s.id not in vides_par_exclusion]
 
     unschedulable = [s for s in stops if not s.allowed_days]
     if unschedulable:
@@ -133,13 +331,21 @@ def calculer_tournee(
     if not stops:
         raise TourneeError("Aucun client planifiable dans cet export -- rien à calculer.")
 
+    days = build_days(start_date, n_days, plafond, jours_exclus, dates_fermees, horaires_min)
+    if not days:
+        raise TourneeError(
+            f"Tous les jours de cette tournée ({n_days} jour(s) à partir du "
+            f"{start_date.strftime('%d/%m/%Y')}) tombent sur un jour exclu "
+            f"({_format_excluded_days(start_date, excluded)}) -- rien à calculer, vérifie la période "
+            "ou les jours exclus/fermés choisis."
+        )
+
     point_labels = {DEPOT_ID: depot, **{s.id: s.address for s in stops}}
     try:
         dist_fn = dist_fn_factory(point_labels)
     except OrsError as e:
         raise TourneeError(f"Erreur cartographie : {e}") from e
 
-    days = build_days(start_date, n_days, plafond)
     result = solve_week_balanced(days, stops, dist_fn, depot_label=depot)
 
     clients_by_id = {s.id: s for s in stops}

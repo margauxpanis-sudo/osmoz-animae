@@ -436,13 +436,82 @@
       </div>
     </div>
     <details class="advanced">
-      <summary>Réglage avancé : plafond d'heures/jour</summary>
+      <summary>Réglage avancé : plafond, jours à exclure, horaires, mode consultations</summary>
       <div class="field-row" style="margin-top:10px;">
         <div class="field">
           <label for="plafondInput">Plafond (heures)</label>
           <input type="number" id="plafondInput" min="1" max="24" value="12">
         </div>
       </div>
+      <div class="field-row" style="margin-top:10px;">
+        <div class="field grow">
+          <label>Jours à exclure de cette tournée, motif hebdomadaire (ex. pas de rendez-vous le dimanche)</label>
+          <div id="joursExclusRow" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px;">
+            <label style="font-weight:400;display:flex;align-items:center;gap:4px;"><input type="checkbox" value="lundi"> Lun</label>
+            <label style="font-weight:400;display:flex;align-items:center;gap:4px;"><input type="checkbox" value="mardi"> Mar</label>
+            <label style="font-weight:400;display:flex;align-items:center;gap:4px;"><input type="checkbox" value="mercredi"> Mer</label>
+            <label style="font-weight:400;display:flex;align-items:center;gap:4px;"><input type="checkbox" value="jeudi"> Jeu</label>
+            <label style="font-weight:400;display:flex;align-items:center;gap:4px;"><input type="checkbox" value="vendredi"> Ven</label>
+            <label style="font-weight:400;display:flex;align-items:center;gap:4px;"><input type="checkbox" value="samedi"> Sam</label>
+            <label style="font-weight:400;display:flex;align-items:center;gap:4px;"><input type="checkbox" value="dimanche"> Dim</label>
+          </div>
+          <p class="hint" style="margin-top:6px;">Aucune case cochée = tous les jours de la période restent utilisables (comportement habituel).</p>
+        </div>
+      </div>
+      <div class="field-row" style="margin-top:10px;">
+        <div class="field grow">
+          <label for="datesFermeesInput">Dates ponctuellement fermées (en plus des jours ci-dessus, ex. absence isolée)</label>
+          <input type="text" id="datesFermeesInput" placeholder="ex. 14/10/2026, 22/10/2026">
+          <p class="hint" style="margin-top:6px;">Dates précises au format JJ/MM/AAAA, séparées par des virgules. Laisser vide si non concerné.</p>
+        </div>
+      </div>
+      <div class="field-row" style="margin-top:10px;">
+        <div class="field grow">
+          <label>Horaires propres à un jour de semaine (mode consultations -- rythme irrégulier)</label>
+          <div id="horairesJoursRows" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+            <div class="horaire-jour-row" data-jour="lundi" style="display:flex;align-items:center;gap:8px;">
+              <span style="width:70px;font-size:12.5px;">Lundi</span>
+              <input type="time" class="horaire-debut" style="max-width:110px;"> <span style="font-size:12px;">à</span> <input type="time" class="horaire-fin" style="max-width:110px;">
+            </div>
+            <div class="horaire-jour-row" data-jour="mardi" style="display:flex;align-items:center;gap:8px;">
+              <span style="width:70px;font-size:12.5px;">Mardi</span>
+              <input type="time" class="horaire-debut" style="max-width:110px;"> <span style="font-size:12px;">à</span> <input type="time" class="horaire-fin" style="max-width:110px;">
+            </div>
+            <div class="horaire-jour-row" data-jour="mercredi" style="display:flex;align-items:center;gap:8px;">
+              <span style="width:70px;font-size:12.5px;">Mercredi</span>
+              <input type="time" class="horaire-debut" style="max-width:110px;"> <span style="font-size:12px;">à</span> <input type="time" class="horaire-fin" style="max-width:110px;">
+            </div>
+            <div class="horaire-jour-row" data-jour="jeudi" style="display:flex;align-items:center;gap:8px;">
+              <span style="width:70px;font-size:12.5px;">Jeudi</span>
+              <input type="time" class="horaire-debut" style="max-width:110px;"> <span style="font-size:12px;">à</span> <input type="time" class="horaire-fin" style="max-width:110px;">
+            </div>
+            <div class="horaire-jour-row" data-jour="vendredi" style="display:flex;align-items:center;gap:8px;">
+              <span style="width:70px;font-size:12.5px;">Vendredi</span>
+              <input type="time" class="horaire-debut" style="max-width:110px;"> <span style="font-size:12px;">à</span> <input type="time" class="horaire-fin" style="max-width:110px;">
+            </div>
+            <div class="horaire-jour-row" data-jour="samedi" style="display:flex;align-items:center;gap:8px;">
+              <span style="width:70px;font-size:12.5px;">Samedi</span>
+              <input type="time" class="horaire-debut" style="max-width:110px;"> <span style="font-size:12px;">à</span> <input type="time" class="horaire-fin" style="max-width:110px;">
+            </div>
+            <div class="horaire-jour-row" data-jour="dimanche" style="display:flex;align-items:center;gap:8px;">
+              <span style="width:70px;font-size:12.5px;">Dimanche</span>
+              <input type="time" class="horaire-debut" style="max-width:110px;"> <span style="font-size:12px;">à</span> <input type="time" class="horaire-fin" style="max-width:110px;">
+            </div>
+          </div>
+          <p class="hint" style="margin-top:6px;">Un jour laissé vide (début ET fin) garde les horaires par défaut (6h-20h30). Renseigner les deux champs pour un jour donné pour lui appliquer des horaires propres.</p>
+        </div>
+      </div>
+      <div class="field-row" style="margin-top:10px;">
+        <div class="field grow">
+          <label for="formatDispoInput">Format des disponibilités dans le formulaire chargé ci-dessus</label>
+          <select id="formatDispoInput">
+            <option value="jours_semaine" selected>Jours de semaine cochés (tournées classiques -- par défaut)</option>
+            <option value="dates_precises">Dates précises cochées (mode consultations, formulaire mensuel)</option>
+          </select>
+          <p class="hint" style="margin-top:6px;">À changer uniquement si le formulaire chargé pose la question "Dates possibles sur la période" (dates précises) plutôt que "Jours possibles sur la période" (jours de semaine).</p>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:2px;">Tous les réglages de cette section sont propres à CETTE tournée, jamais mémorisés d'un calcul à l'autre.</p>
     </details>
 
     <button class="primary-btn" id="calculerBtn">Calculer la tournée</button>
@@ -840,6 +909,10 @@
   var debutInput = document.getElementById("debutInput");
   var joursInput = document.getElementById("joursInput");
   var plafondInput = document.getElementById("plafondInput");
+  var joursExclusRow = document.getElementById("joursExclusRow");
+  var datesFermeesInput = document.getElementById("datesFermeesInput");
+  var horairesJoursRows = document.getElementById("horairesJoursRows");
+  var formatDispoInput = document.getElementById("formatDispoInput");
   var recalcBtn = document.getElementById("recalcBtn");
   var agendaBtn = document.getElementById("agendaBtn");
   var agendaStatusEl = document.getElementById("agendaStatus");
@@ -857,11 +930,56 @@
       calcErrorEl.classList.add("show");
       return;
     }
+    var joursExclus = Array.prototype.slice.call(joursExclusRow.querySelectorAll("input[type=checkbox]:checked"))
+      .map(function(cb){ return cb.value; });
+
+    // Dates fermées : saisies en JJ/MM/AAAA (plus naturel pour Ludivine),
+    // converties en AAAA-MM-JJ attendu par l'API (tournee_service.py).
+    // Erreur bloquante affichée AVANT tout appel réseau en cas de format
+    // invalide -- même principe que le reste de l'outil : ne jamais deviner
+    // une date mal saisie.
+    var datesFermees = [];
+    var datesFermeesRaw = (datesFermeesInput.value || "").split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+    for(var di = 0; di < datesFermeesRaw.length; di++){
+      var m = datesFermeesRaw[di].match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if(!m){
+        calcErrorEl.textContent = "Date fermée invalide : '" + datesFermeesRaw[di] + "' (attendu JJ/MM/AAAA, ex. 14/10/2026).";
+        calcErrorEl.classList.add("show");
+        return;
+      }
+      datesFermees.push(m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0"));
+    }
+
+    // Horaires par jour de semaine : un jour compte seulement si début ET
+    // fin sont renseignés (voir tournee_service.calculer_tournee, qui
+    // rejette explicitement un seul des deux champs rempli).
+    var horairesJours = {};
+    var horaireErreur = null;
+    Array.prototype.forEach.call(horairesJoursRows.querySelectorAll(".horaire-jour-row"), function(row){
+      var debut = row.querySelector(".horaire-debut").value;
+      var fin = row.querySelector(".horaire-fin").value;
+      if(!debut && !fin) return;
+      if(!debut || !fin){
+        horaireErreur = "Horaire incomplet pour " + row.getAttribute("data-jour") + " : renseigne le début ET la fin, ou laisse les deux vides.";
+        return;
+      }
+      horairesJours[row.getAttribute("data-jour")] = { debut: debut, fin: fin };
+    });
+    if(horaireErreur){
+      calcErrorEl.textContent = horaireErreur;
+      calcErrorEl.classList.add("show");
+      return;
+    }
+
     var params = {
       debut: debutInput.value,
       jours: parseInt(joursInput.value, 10),
       depot: depotInput.value.trim(),
       plafond: parseInt(plafondInput.value, 10) || 12,
+      jours_exclus: joursExclus,
+      dates_fermees: datesFermees,
+      horaires_jours: horairesJours,
+      format_dispo: formatDispoInput.value || "jours_semaine",
     };
     calculerBtn.disabled = true;
     calcStatusEl.textContent = "Calcul en cours… (jusqu'à 1-2 minutes, surtout si le service vient de se réveiller)";
@@ -870,6 +988,8 @@
       var result = await callApi("/calculer", {
         export_json: currentRawExport,
         debut: params.debut, jours: params.jours, depot: params.depot, plafond: params.plafond,
+        jours_exclus: params.jours_exclus, dates_fermees: params.dates_fermees,
+        horaires_jours: params.horaires_jours, format_dispo: params.format_dispo,
       });
       currentParams = { debut: params.debut, jours: params.jours, depot: params.depot };
       overnight = {}; // nouvelle tournée -> on repart d'une relecture propre

@@ -24,11 +24,12 @@ utiliser de ligne de commande :
    `osmoz-animae-tool`), visibilité **Private** (ce code traite des données
    clients, même s'il n'en stocke aucune -- autant rester prudent).
 3. Sur la page du dépôt vide : lien "uploading an existing file" (ou "Add
-   file > Upload files"). Glisser-déposer tout le contenu de ce dossier
-   (`osmoz-animae-tool/`) tel quel, **y compris** `render.yaml`, `.gitignore`
-   et le dossier `engine/` en entier -- **sauf** `engine/.env` (ne jamais
-   l'envoyer sur GitHub, même en dépôt privé : c'est le fichier qui contient
-   la clé API).
+   file > Upload files"). Glisser-déposer tout le contenu du dossier
+   `OsmozAnimae` (celui qui contient déjà `engine/`, `interface/`,
+   `bridge/`...) tel quel, **y compris** `render.yaml`, `.gitignore` et le
+   dossier `engine/` en entier -- **sauf** `engine/.env` (ne jamais l'envoyer
+   sur GitHub, même en dépôt privé : c'est le fichier qui contient la clé
+   API) et `engine/.ors_cache.json`.
 4. Valider ("Commit changes").
 
 *(Si Margaux ou une autre personne préfère la ligne de commande : `git init`,

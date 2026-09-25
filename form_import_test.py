@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from form_import import import_responses, map_days, parse_abonnement, parse_animal_count, parse_window
+from form_import import import_responses, map_dates, map_days, parse_abonnement, parse_animal_count, parse_window
 from schema import WindowType
 
 # ---------------------------------------------------------------------------
@@ -76,6 +76,31 @@ assert warnings, "doit signaler l'ambiguïté"
 indices2, warnings2 = map_days("Mercredi, Jeudi", tournee_dates)
 print(f"  'Mercredi, Jeudi' -> indices {indices2}")
 assert indices2 == [2, 3] and not warnings2
+
+# ---------------------------------------------------------------------------
+# 2bis. map_dates (mode consultations, 26 sept. 2026) : même période à 2
+# lundis, mais AUCUNE ambiguïté attendue puisque les cases cochées sont des
+# dates précises, pas des noms de jour -- exactement le cas que map_days ne
+# peut pas gérer proprement à l'échelle d'un mois.
+# ---------------------------------------------------------------------------
+print("\n=== map_dates (même période à 2 lundis, mais dates précises -- aucune ambiguïté) ===")
+indices3, warnings3 = map_dates("Lundi 19/10", tournee_dates)
+print(f"  'Lundi 19/10' -> indices {indices3}")
+assert indices3 == [0] and not warnings3, "doit retenir SEULEMENT le 19/10, jamais le 26/10"
+
+indices4, warnings4 = map_dates("19/10, 26/10", tournee_dates)
+print(f"  '19/10, 26/10' -> indices {indices4}")
+assert indices4 == [0, 7] and not warnings4, "les deux dates explicitement cochées doivent être retenues, sans avertissement"
+
+indices5, warnings5 = map_dates("01/01", tournee_dates)
+print(f"  '01/01' (hors période) -> indices {indices5}")
+for w in warnings5:
+    print(f"    ⚠ {w}")
+assert indices5 == [] and warnings5, "une date hors période doit être signalée, pas ignorée silencieusement"
+
+indices6, warnings6 = map_dates("", tournee_dates)
+assert indices6 == [] and warnings6, "un champ vide doit être signalé"
+print("  OK -- dates précises, hors période et champ vide correctement gérés.")
 
 # ---------------------------------------------------------------------------
 # 3. Import complet d'un export brut simulé (format du pont Apps Script)
