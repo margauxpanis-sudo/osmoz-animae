@@ -31,6 +31,18 @@ sont sur la même origine -- plus aucune restriction cross-origin possible,
 et le lien à utiliser devient l'adresse Render elle-même plutôt que le lien
 d'artefact Claude (qui reste consultable mais n'est plus le lien à utiliser
 pour un vrai calcul).
+
+*Correctif du même jour* : premier essai avec le fichier lu depuis
+../interface/ (en dehors de engine/) -> Internal Server Error en
+production. Cause probable : render.yaml fixe rootDir: engine, et Render ne
+déploie vraisemblablement que ce sous-dossier -- le fichier hors de engine/
+n'existe simplement pas sur le serveur, même s'il est bien dans le dépôt
+GitHub. Corrigé en servant une copie du fichier stockée DANS engine/
+(engine/static/revue_tournee.html), qui ne dépend d'aucune remontée de
+dossier ni d'hypothèse sur ce que Render déploie réellement. Cette copie
+doit être tenue à jour manuellement si interface/revue_tournee.html change
+(les deux existent maintenant : interface/ reste la source pour les tests
+locaux/Playwright, engine/static/ est ce qui part réellement en production).
 """
 
 from __future__ import annotations
@@ -48,11 +60,9 @@ from tournee_service import TourneeError, calculer_tournee, recalculer_apres_nui
 
 app = FastAPI(title="Osmoz Animae — moteur de tournée")
 
-# Chemin vers l'interface, en dehors de engine/ (voir render.yaml, rootDir:
-# engine) -- calculé depuis l'emplacement de ce fichier plutôt que depuis le
-# répertoire de travail courant, pour ne pas dépendre de comment/où le
-# process est démarré.
-INTERFACE_PATH = Path(__file__).resolve().parent.parent / "interface" / "revue_tournee.html"
+# Chemin vers l'interface -- DANS engine/ (engine/static/), volontairement,
+# pas dans ../interface/ : voir la note "Correctif du même jour" ci-dessus.
+INTERFACE_PATH = Path(__file__).resolve().parent / "static" / "revue_tournee.html"
 
 # Ouvert à toute origine : pas de cookie/session côté serveur (le jeton
 # passe par un en-tête Authorization explicite, jamais par un cookie), donc
