@@ -1,0 +1,68 @@
+{
+  "days": [
+    {
+      "day_index": 0,
+      "label": "Lundi 02/11",
+      "span_min": 463,
+      "finish_min": 1101,
+      "steps": [
+        {
+          "stop_id": "les_filles_au_rulan_3",
+          "label": "Les filles au Rulan (Lannion)",
+          "arrival_min": 780,
+          "service_minutes": 180,
+          "phone": "0604050607",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "day_index": 1,
+      "label": "Mardi 03/11",
+      "span_min": 337,
+      "finish_min": 697,
+      "steps": [
+        {
+          "stop_id": "mailys_4",
+          "label": "Maïlys (Plouaret)",
+          "arrival_min": 482,
+          "service_minutes": 45,
+          "phone": "0605060708",
+          "notes": "Chien parfois présent, non concerné par la séance"
+        },
+        {
+          "stop_id": "aurore_1",
+          "label": "Aurore (Saint-Thégonnec)",
+          "arrival_min": 561,
+          "service_minutes": 45,
+          "phone": "0602030405",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "day_index": 2,
+      "label": "Mercredi 04/11",
+      "span_min": 448,
+      "finish_min": 808,
+      "steps": [
+        {
+          "stop_id": "caroline_2",
+          "label": "Caroline (Landerneau)",
+          "arrival_min": 430,
+          "service_minutes": 45,
+          "phone": "0603040506",
+          "notes": ""
+        },
+        {
+          "stop_id": "laetitia_0",
+          "label": "Laetitia (Bodilis)",
+          "arrival_min": 496,
+          "service_minutes": 225,
+          "phone": "0601020304",
+          "notes": ""
+        }
+      ]
+    }
+  ]
+}

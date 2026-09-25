@@ -1,0 +1,21 @@
+# Configuration de déploiement Render (Blueprint) -- voir engine/README.md
+# pour la procédure complète, pas à pas, pour créer le compte et connecter
+# ce dépôt.
+#
+# ORS_API_KEY et API_TOKEN sont volontairement absents de ce fichier
+# (sync: false) : ce sont des secrets, ils se renseignent une seule fois à
+# la main dans le tableau de bord Render (Environment), jamais commités
+# dans le dépôt de code.
+services:
+  - type: web
+    name: osmoz-animae-moteur
+    runtime: python
+    plan: free
+    rootDir: engine
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ORS_API_KEY
+        sync: false
+      - key: API_TOKEN
+        sync: false
