@@ -2,66 +2,49 @@
 <meta charset="utf-8">
 <title>Revue de tournée</title>
 <style>
+  /*
+   * Palette de marque Osmoz Animae (Canva, fournie par Margaux le 26 sept. 2026) :
+   * bordeaux #840a0a, crème #f3e8cf, marine #063146, bleu #6698b6.
+   * Fond marine choisi par Margaux après comparaison de 3 variantes (crème /
+   * bordeaux / marine). Les cartes restent en crème pour la lisibilité --
+   * un fond marine plein écran avec du texte dessus partout aurait été
+   * fatigant à l'usage quotidien.
+   *
+   * Le thème sombre automatique (prefers-color-scheme) qui existait avant a
+   * été retiré : il n'était jamais activable depuis l'interface (aucun
+   * bouton ne posait data-theme) et une palette de marque fixe est plus
+   * cohérente qu'un deuxième jeu de couleurs qui ne serait plus à la marque.
+   *
+   * Titre "Le petit cochon" (police Canva payante, non chargeable sur le
+   * web) remplacée par Fredoka -- même esprit rond et chaleureux, gratuite.
+   * Texte de marque : Raleway. JetBrains Mono conservé pour les éléments
+   * tabulaires/techniques (heures, stats, statuts) -- choix fonctionnel
+   * d'alignement, indépendant de la marque.
+   */
   :root{
-    --bg:#EDE7D9;
-    --surface:#FBF8F1;
-    --surface-2:#F2ECDD;
-    --ink:#23291D;
-    --ink-soft:#54604C;
-    --pine:#2E4234;
-    --pine-ink:#1C2A20;
-    --leather:#8A5A3B;
-    --leather-ink:#6E4A31;
-    --amber:#B5762A;
-    --amber-bg:#F5E3C9;
-    --line:rgba(35,41,29,.14);
-    --line-strong:rgba(35,41,29,.28);
-    --on-pine:#F4F0E4;
+    --bg:#063146;
+    --surface:#F3E8CF;
+    --surface-2:#FBF3DF;
+    --ink:#063146;
+    --ink-soft:rgba(6,49,70,.68);
+    --on-bg:#F3E8CF;
+    --on-bg-soft:rgba(243,232,207,.74);
+    --accent:#840A0A;
+    --accent-ink:#840A0A;
+    --accent-2:#6698B6;
+    --on-accent:#F3E8CF;
+    --notice-bg:#E7EFF2;
+    --line:rgba(6,49,70,.16);
+    --line-strong:rgba(6,49,70,.30);
     color-scheme: light;
-  }
-  @media (prefers-color-scheme: dark){
-    :root:not([data-theme="light"]){
-      --bg:#171C16;
-      --surface:#1F251D;
-      --surface-2:#242B21;
-      --ink:#EDE9DC;
-      --ink-soft:#AEB4A2;
-      --pine:#8FB89C;
-      --pine-ink:#B8D6BF;
-      --leather:#D3A17C;
-      --leather-ink:#E3BC9E;
-      --amber:#E3A85B;
-      --amber-bg:#3A2E17;
-      --line:rgba(237,233,220,.14);
-      --line-strong:rgba(237,233,220,.26);
-      --on-pine:#12160F;
-      color-scheme: dark;
-    }
-  }
-  :root[data-theme="dark"]{
-    --bg:#171C16;
-    --surface:#1F251D;
-    --surface-2:#242B21;
-    --ink:#EDE9DC;
-    --ink-soft:#AEB4A2;
-    --pine:#8FB89C;
-    --pine-ink:#B8D6BF;
-    --leather:#D3A17C;
-    --leather-ink:#E3BC9E;
-    --amber:#E3A85B;
-    --amber-bg:#3A2E17;
-    --line:rgba(237,233,220,.14);
-    --line-strong:rgba(237,233,220,.26);
-    --on-pine:#12160F;
-    color-scheme: dark;
   }
 
   *{box-sizing:border-box;}
   body{
     margin:0;
     background:var(--bg);
-    color:var(--ink);
-    font-family:'Karla',system-ui,sans-serif;
+    color:var(--on-bg);
+    font-family:'Raleway',system-ui,sans-serif;
     padding-inline:20px;
     padding-block:28px calc(48px + env(safe-area-inset-bottom,0px));
   }
@@ -72,20 +55,20 @@
     font-size:11px;
     letter-spacing:.14em;
     text-transform:uppercase;
-    color:var(--leather-ink);
+    color:var(--accent-2);
     margin:0 0 6px;
   }
   h1{
-    font-family:'Fjalla One',system-ui,sans-serif;
-    font-weight:400;
+    font-family:'Fredoka',system-ui,sans-serif;
+    font-weight:600;
     font-size:clamp(30px,6vw,42px);
     letter-spacing:.01em;
     margin:0 0 4px;
-    color:var(--pine-ink);
+    color:var(--on-bg);
     text-wrap:balance;
   }
   .sub{
-    color:var(--ink-soft);
+    color:var(--on-bg-soft);
     font-size:15px;
     margin:0 0 22px;
   }
@@ -94,7 +77,7 @@
     display:flex;
     gap:12px;
     align-items:flex-start;
-    background:var(--amber-bg);
+    background:var(--notice-bg);
     border:1px solid var(--line-strong);
     border-radius:10px;
     padding:14px 16px;
@@ -103,7 +86,7 @@
   .banner .dot{
     flex:none;
     width:9px;height:9px;border-radius:50%;
-    background:var(--amber);
+    background:var(--accent-2);
     margin-top:6px;
   }
   .banner strong{color:var(--ink);}
@@ -125,7 +108,7 @@
     font-family:'JetBrains Mono',monospace;
     font-variant-numeric:tabular-nums;
     font-size:22px;
-    color:var(--pine-ink);
+    color:var(--accent-2);
   }
   .stat .l{font-size:12px;color:var(--ink-soft);margin-top:2px;}
 
@@ -143,12 +126,12 @@
     gap:12px;
     flex-wrap:wrap;
     padding:16px 18px;
-    background:var(--pine);
-    color:var(--on-pine);
+    background:var(--accent);
+    color:var(--on-accent);
   }
   .day-head h2{
-    font-family:'Fjalla One',system-ui,sans-serif;
-    font-weight:400;
+    font-family:'Fredoka',system-ui,sans-serif;
+    font-weight:600;
     font-size:20px;
     letter-spacing:.03em;
     margin:0;
@@ -171,13 +154,13 @@
     padding:14px 18px;
     border-top:1px solid var(--line);
   }
-  .stop.overnight{background:var(--amber-bg);}
+  .stop.overnight{background:var(--notice-bg);}
   .time{
     font-family:'JetBrains Mono',monospace;
     font-variant-numeric:tabular-nums;
     font-size:15px;
     line-height:1.3;
-    color:var(--pine-ink);
+    color:var(--accent-2);
     padding-top:2px;
   }
   .time small{display:block;font-size:11px;color:var(--ink-soft);font-weight:400;}
@@ -194,13 +177,13 @@
     font-size:11px;
     font-weight:700;
     letter-spacing:.02em;
-    color:var(--leather-ink);
+    color:var(--accent-ink);
   }
   .flag{
     display:none;
     margin-top:6px;
     font-size:12px;
-    color:var(--amber);
+    color:var(--accent);
     font-weight:700;
     letter-spacing:.02em;
   }
@@ -208,7 +191,7 @@
 
   .actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
   button{
-    font-family:'Karla',system-ui,sans-serif;
+    font-family:'Raleway',system-ui,sans-serif;
     font-size:12.5px;
     font-weight:700;
     border-radius:7px;
@@ -219,10 +202,10 @@
     color:var(--ink);
     white-space:nowrap;
   }
-  button:hover{border-color:var(--pine-ink);}
-  button.on{background:var(--amber);border-color:var(--amber);color:#241800;}
+  button:hover{border-color:var(--accent-2);}
+  button.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent);}
   button.ghost{background:transparent;}
-  button.copied{background:var(--pine);border-color:var(--pine);color:#F4F0E4;}
+  button.copied{background:var(--accent-2);border-color:var(--accent-2);color:#fff;}
 
   .msg{
     grid-column:1 / -1;
@@ -241,7 +224,7 @@
   .footnote{
     margin-top:20px;
     font-size:12.5px;
-    color:var(--ink-soft);
+    color:var(--on-bg-soft);
     line-height:1.6;
   }
   @media (max-width:480px){
@@ -264,24 +247,24 @@
   .loader .txt strong{display:block;font-size:14px;margin-bottom:2px;}
   .loader .txt span{font-size:12.5px;color:var(--ink-soft);}
   .file-btn{
-    font-family:'Karla',system-ui,sans-serif;
+    font-family:'Raleway',system-ui,sans-serif;
     font-size:13px;
     font-weight:700;
     border-radius:7px;
     padding:9px 14px;
     cursor:pointer;
-    border:1px solid var(--pine);
-    background:var(--pine);
-    color:var(--on-pine);
+    border:1px solid var(--accent);
+    background:var(--accent);
+    color:var(--on-accent);
     white-space:nowrap;
   }
   .file-btn:hover{opacity:.9;}
   .loader input[type=file]{display:none;}
-  .loader.loaded{border-color:var(--pine);}
+  .loader.loaded{border-color:var(--accent-2);}
   .loader .status{
     font-family:'JetBrains Mono',monospace;
     font-size:11.5px;
-    color:var(--pine-ink);
+    color:var(--accent-2);
     display:none;
   }
   .loader.loaded .status{display:block;}
@@ -299,11 +282,11 @@
     flex-wrap:wrap;
     margin-bottom:22px;
   }
-  .depot label{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
+  .depot label{font-size:12.5px;color:var(--on-bg-soft);white-space:nowrap;}
   .depot input[type=text]{
     flex:1;
     min-width:200px;
-    font-family:'Karla',system-ui,sans-serif;
+    font-family:'Raleway',system-ui,sans-serif;
     font-size:13.5px;
     padding:8px 10px;
     border-radius:7px;
@@ -319,8 +302,8 @@
   }
 
   .settings{margin-bottom:18px;}
-  .settings summary{cursor:pointer;font-size:12.5px;color:var(--ink-soft);padding:6px 2px;}
-  .settings summary:hover{color:var(--ink);}
+  .settings summary{cursor:pointer;font-size:12.5px;color:var(--on-bg-soft);padding:6px 2px;}
+  .settings summary:hover{color:var(--on-bg);}
   .settings-body{
     display:flex;gap:10px;flex-wrap:wrap;align-items:center;
     background:var(--surface);border:1px solid var(--line);border-radius:10px;
@@ -328,7 +311,7 @@
   }
   .settings-body label{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
   .settings-body input[type=text]{
-    flex:1;min-width:160px;font-family:'Karla',system-ui,sans-serif;font-size:13px;
+    flex:1;min-width:160px;font-family:'Raleway',system-ui,sans-serif;font-size:13px;
     padding:7px 9px;border-radius:7px;border:1px solid var(--line-strong);
     background:var(--surface-2);color:var(--ink);
   }
@@ -338,47 +321,47 @@
     padding:16px 18px;margin-bottom:22px;
   }
   .panel h3{
-    font-family:'Fjalla One',system-ui,sans-serif;font-weight:400;font-size:16px;
-    margin:0 0 4px;color:var(--pine-ink);
+    font-family:'Fredoka',system-ui,sans-serif;font-weight:600;font-size:16px;
+    margin:0 0 4px;color:var(--accent-ink);
   }
   .panel .hint{font-size:12.5px;color:var(--ink-soft);margin:0 0 14px;}
   .field-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;}
   .field{display:flex;flex-direction:column;gap:4px;}
   .field label{font-size:12px;color:var(--ink-soft);}
   .field input[type=text],.field input[type=date],.field input[type=number]{
-    font-family:'Karla',system-ui,sans-serif;font-size:13.5px;padding:8px 10px;
+    font-family:'Raleway',system-ui,sans-serif;font-size:13.5px;padding:8px 10px;
     border-radius:7px;border:1px solid var(--line-strong);background:var(--surface);
     color:var(--ink);min-width:150px;
   }
   .field.grow{flex:1;}
   .field.grow input{width:100%;}
   .primary-btn{
-    font-family:'Karla',system-ui,sans-serif;font-size:13.5px;font-weight:700;
-    border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid var(--pine);
-    background:var(--pine);color:var(--on-pine);white-space:nowrap;
+    font-family:'Raleway',system-ui,sans-serif;font-size:13.5px;font-weight:700;
+    border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid var(--accent);
+    background:var(--accent);color:var(--on-accent);white-space:nowrap;
   }
   .primary-btn:hover{opacity:.9;}
   .primary-btn:disabled{opacity:.5;cursor:not-allowed;}
-  .calc-status{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--pine-ink);margin-top:8px;display:none;}
+  .calc-status{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--accent-2);margin-top:8px;display:none;}
   .calc-status.show{display:block;}
   .calc-error{font-size:12.5px;color:#B5432A;margin-top:8px;display:none;}
   .calc-error.show{display:block;}
 
   .warnings{
-    background:var(--amber-bg);border:1px solid var(--line-strong);border-radius:10px;
+    background:var(--notice-bg);border:1px solid var(--line-strong);border-radius:10px;
     padding:14px 16px;margin-bottom:22px;display:none;
   }
   .warnings.show{display:block;}
-  .warnings strong{display:block;margin-bottom:6px;font-size:13.5px;}
+  .warnings strong{display:block;margin-bottom:6px;font-size:13.5px;color:var(--ink);}
   .warnings ul{margin:0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--ink-soft);}
 
   details.advanced{margin-top:20px;}
-  details.advanced summary{cursor:pointer;font-size:12.5px;color:var(--ink-soft);padding:4px 2px;}
-  details.advanced summary:hover{color:var(--ink);}
+  details.advanced summary{cursor:pointer;font-size:12.5px;color:var(--on-bg-soft);padding:4px 2px;}
+  details.advanced summary:hover{color:var(--on-bg);}
   .advanced-body{margin-top:10px;display:flex;flex-direction:column;gap:14px;}
 </style>
 
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fjalla+One&family=Karla:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Raleway:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 
 <div class="wrap">
   <p class="eyebrow" id="brandEyebrow">Osmoz Animae · Moteur de tournée</p>
