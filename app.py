@@ -32,17 +32,25 @@ et le lien à utiliser devient l'adresse Render elle-même plutôt que le lien
 d'artefact Claude (qui reste consultable mais n'est plus le lien à utiliser
 pour un vrai calcul).
 
-*Correctif du même jour* : premier essai avec le fichier lu depuis
-../interface/ (en dehors de engine/) -> Internal Server Error en
-production. Cause probable : render.yaml fixe rootDir: engine, et Render ne
-déploie vraisemblablement que ce sous-dossier -- le fichier hors de engine/
-n'existe simplement pas sur le serveur, même s'il est bien dans le dépôt
-GitHub. Corrigé en servant une copie du fichier stockée DANS engine/
-(engine/static/revue_tournee.html), qui ne dépend d'aucune remontée de
-dossier ni d'hypothèse sur ce que Render déploie réellement. Cette copie
-doit être tenue à jour manuellement si interface/revue_tournee.html change
-(les deux existent maintenant : interface/ reste la source pour les tests
-locaux/Playwright, engine/static/ est ce qui part réellement en production).
+*Correctifs du même jour, dans l'ordre* :
+1. Premier essai avec le fichier lu depuis ../interface/ (en dehors de
+   engine/) -> Internal Server Error en production.
+2. Deuxième essai : servi depuis engine/static/revue_tournee.html (dans
+   engine/, pour ne dépendre d'aucune remontée de dossier) -> toujours
+   Internal Server Error.
+3. Cause réelle, trouvée en lisant les logs Render avec Margaux : le dépôt
+   GitHub réel n'a JAMAIS eu de structure engine/ / interface/ / bridge/
+   comme sur le Mac -- tous les fichiers (app.py, form_import.py,
+   revue_tournee.html, les .gs...) sont à la RACINE du dépôt, à plat,
+   malgré render.yaml qui déclare rootDir: engine (jamais vraiment
+   appliqué -- Render tourne en fait à la racine, comme le confirment les
+   chemins d'erreur observés : /opt/render/project/src/..., sans "engine"
+   dedans). Corrigé une troisième fois : le fichier est maintenant attendu
+   directement à côté de app.py, sans aucun sous-dossier -- ce qui
+   correspond enfin à ce qui existe vraiment sur GitHub. À charge pour
+   Margaux de remplacer le revue_tournee.html déjà présent à la racine du
+   dépôt (fichier existant, à écraser par un nouvel upload du même nom) --
+   plus besoin de créer le moindre dossier.
 """
 
 from __future__ import annotations
@@ -60,9 +68,10 @@ from tournee_service import TourneeError, calculer_tournee, recalculer_apres_nui
 
 app = FastAPI(title="Osmoz Animae — moteur de tournée")
 
-# Chemin vers l'interface -- DANS engine/ (engine/static/), volontairement,
-# pas dans ../interface/ : voir la note "Correctif du même jour" ci-dessus.
-INTERFACE_PATH = Path(__file__).resolve().parent / "static" / "revue_tournee.html"
+# Chemin vers l'interface -- à CÔTÉ de app.py, sans sous-dossier : voir la
+# note "Correctifs du même jour" ci-dessus (le dépôt GitHub réel est plat,
+# pas organisé en engine/ / interface/ / bridge/ comme sur le Mac).
+INTERFACE_PATH = Path(__file__).resolve().parent / "revue_tournee.html"
 
 # Ouvert à toute origine : pas de cookie/session côté serveur (le jeton
 # passe par un en-tête Authorization explicite, jamais par un cookie), donc
