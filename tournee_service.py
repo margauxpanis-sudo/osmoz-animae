@@ -334,6 +334,7 @@ def calculer_tournee(
     dates_dernier_recours: list[str] | None = None,
     plafond_hebdo: int | None = None,
     appliquer_plafond_hebdo: bool = False,
+    depuis: str | None = None,
     dist_fn_factory: DistFnFactory = _default_dist_fn_factory,
 ) -> tuple[dict, list[str]]:
     """Premier calcul complet : export brut du formulaire -> tournée
@@ -380,6 +381,15 @@ def calculer_tournee(
     appel déclenché par un bouton côté interface une fois l'avertissement
     vu, pas comme le comportement par défaut.
 
+    depuis (ex. "2026-10-01", demande de Margaux, 28 sept. 2026) : ignore
+    toute réponse du formulaire antérieure à cette date (colonne
+    "Horodateur" ajoutée automatiquement par Google Forms) -- pensé pour
+    réutiliser le MÊME formulaire d'une tournée classique à l'autre sans
+    en recréer un identique à chaque fois (bridge/Code.gs exporte
+    inconditionnellement toutes les réponses de la feuille, sans notion de
+    "depuis le dernier export"). None (défaut) = comportement historique
+    inchangé, aucun filtre. Voir form_import.import_responses.
+
     Renvoie (résultat exportable pour l'interface, avertissements à
     afficher). Lève TourneeError pour tout échec métier."""
     if format_dispo not in _JOURS_FIELD_BY_FORMAT:
@@ -399,11 +409,17 @@ def calculer_tournee(
             )
         horaires_min[jour_norm] = (debut_min, fin_min)
 
+    depuis_date = None
+    if depuis is not None and str(depuis).strip():
+        parsed_depuis = _parse_iso_dates([depuis], "Date 'depuis'")
+        depuis_date = next(iter(parsed_depuis))
+
     tournee_dates = [start_date + timedelta(days=i) for i in range(n_days)]
     stops, warnings = import_responses(
         raw_responses, tournee_dates,
         field_map={"jours": _JOURS_FIELD_BY_FORMAT[format_dispo]},
         jours_format="dates" if format_dispo == "dates_precises" else "semaine",
+        depuis=depuis_date,
     )
     warnings = list(warnings)
 

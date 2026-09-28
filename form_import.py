@@ -215,6 +215,44 @@ def map_dates(text: str, tournee_dates: list[date]) -> tuple[list[int], list[str
     return sorted(set(matched_indices)), warnings
 
 
+_HORODATEUR_ISO_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
+_HORODATEUR_FR_RE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})")
+
+
+def _parse_horodateur(raw) -> date | None:
+    """Interprète la valeur brute de la colonne "Horodateur" (ajoutée
+    automatiquement par Google Forms à chaque réponse) en date. Le pont
+    Apps Script (bridge/Code.gs) sérialise une cellule de type Date en
+    chaîne ISO via JSON.stringify (ex. "2026-09-28T14:32:10.000Z",
+    comportement standard d'un objet Date JS) -- c'est le format attendu
+    en priorité ici. Filet de sécurité pour le même piège déjà documenté
+    sur le numéro de téléphone (pre-tournee-templates.md) : si la colonne
+    a été convertie en texte au format français par Google Sheets, un
+    format "28/09/2026 14:32:10" est aussi reconnu.
+
+    Renvoie None si la valeur est vide ou ne correspond à aucun des deux
+    formats -- jamais une exception, jamais une supposition. L'appelant
+    décide alors, par prudence, de garder la ligne plutôt que de risquer
+    de perdre une vraie réponse récente (voir import_responses, paramètre
+    depuis)."""
+    s = str(raw or "").strip()
+    if not s:
+        return None
+    m = _HORODATEUR_ISO_RE.match(s)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
+    m = _HORODATEUR_FR_RE.match(s)
+    if m:
+        try:
+            return date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            return None
+    return None
+
+
 def _slug(text: str) -> str:
     t = _strip_accents(str(text)).lower()
     t = re.sub(r"[^a-z0-9]+", "_", t).strip("_")
@@ -226,6 +264,7 @@ def import_responses(
     tournee_dates: list[date],
     field_map: dict[str, str] | None = None,
     jours_format: str = "semaine",
+    depuis: date | None = None,
 ) -> tuple[list[Stop], list[str]]:
     """Transforme l'export brut du pont Apps Script (une liste de dicts,
     une entrée par réponse, clés = intitulés exacts des questions) en liste
@@ -243,7 +282,22 @@ def import_responses(
     map_days) ou "dates" (mode consultations, cases à cocher des dates
     précises du mois, voir map_dates) -- jamais mélangé, l'appelant
     (tournee_service.calculer_tournee) choisit l'un ou l'autre selon
-    format_dispo, jamais les deux à la fois sur le même calcul."""
+    format_dispo, jamais les deux à la fois sur le même calcul.
+
+    depuis (demande de Margaux, 28 sept. 2026) : ignore toute réponse dont
+    la colonne "Horodateur" (ajoutée automatiquement par Google Forms) est
+    antérieure à cette date. Pensé pour réutiliser le MÊME formulaire d'une
+    tournée à l'autre sans recréer un formulaire identique à chaque fois --
+    bridge/Code.gs exporte inconditionnellement TOUTES les lignes de la
+    feuille de réponses (aucun filtre par date de son côté), donc sans ce
+    paramètre, une réponse déjà traitée lors d'une tournée précédente
+    resterait indéfiniment incluse dans les exports suivants (avec des
+    "jours possibles" cochés pour une période qui n'a plus cours). None
+    (défaut) = comportement historique inchangé, aucun filtre. Une ligne
+    dont l'Horodateur ne peut pas être interprété (voir _parse_horodateur)
+    est gardée par précaution plutôt qu'écartée à tort, avec un
+    avertissement dédié -- même principe que le reste de ce fichier :
+    jamais perdre une réponse silencieusement."""
     default_map = {
         "nom": "Nom et prénom",
         "telephone": "Numéro de téléphone",
@@ -253,11 +307,38 @@ def import_responses(
         "contrainte": "Avez-vous une contrainte d'horaire ferme, ou juste une préférence ?",
         "remarques": "Remarques complémentaires",
         "abonnement": "Abonnement annuel ?",
+        "date_reponse": "Horodateur",
     }
     fmap = {**default_map, **(field_map or {})}
 
     stops: list[Stop] = []
     all_warnings: list[str] = []
+
+    if depuis is not None:
+        kept_responses = []
+        skipped_count = 0
+        unrecognized_count = 0
+        for resp in raw_responses:
+            horodateur = _parse_horodateur(resp.get(fmap["date_reponse"]))
+            if horodateur is None:
+                unrecognized_count += 1
+                kept_responses.append(resp)  # gardée par précaution, voir avertissement ci-dessous
+                continue
+            if horodateur >= depuis:
+                kept_responses.append(resp)
+            else:
+                skipped_count += 1
+        raw_responses = kept_responses
+        if skipped_count:
+            all_warnings.append(
+                f"{skipped_count} réponse(s) antérieure(s) au {depuis.strftime('%d/%m/%Y')} ignorée(s) "
+                "(réponse(s) d'une tournée précédente sur ce même formulaire réutilisé)."
+            )
+        if unrecognized_count:
+            all_warnings.append(
+                f"{unrecognized_count} réponse(s) avec une colonne '{fmap['date_reponse']}' illisible -- "
+                "gardée(s) par précaution malgré le filtre 'depuis', à vérifier à la main."
+            )
 
     for i, resp in enumerate(raw_responses):
         row_ref = resp.get("_row", i + 2)

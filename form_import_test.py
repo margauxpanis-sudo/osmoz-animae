@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from form_import import import_responses, map_dates, map_days, parse_abonnement, parse_animal_count, parse_window
+from form_import import _parse_horodateur, import_responses, map_dates, map_days, parse_abonnement, parse_animal_count, parse_window
 from schema import WindowType
 
 # ---------------------------------------------------------------------------
@@ -153,5 +153,73 @@ assert stops[0].abonnement_annuel is True, stops[0].abonnement_annuel
 assert stops[1].abonnement_annuel is False, stops[1].abonnement_annuel
 assert not any("Abonnement annuel" in w for w in warns), \
     "l'absence de la question ne doit pas déclencher un avertissement"
+
+# ---------------------------------------------------------------------------
+# 4. _parse_horodateur (28 sept. 2026, demande de Margaux : réutiliser le
+#    même formulaire d'une tournée à l'autre sans recréer un formulaire
+#    identique -> filtrage par colonne "Horodateur")
+# ---------------------------------------------------------------------------
+cases_horodateur = [
+    ("2026-11-05T14:32:10.000Z", date(2026, 11, 5)),  # JSON.stringify d'un objet Date JS (cas normal)
+    ("2026-11-05T14:32:10", date(2026, 11, 5)),
+    ("05/11/2026 14:32:10", date(2026, 11, 5)),  # filet de sécurité, colonne convertie en texte français
+    ("", None),
+    ("texte quelconque", None),
+]
+print("\n=== _parse_horodateur ===")
+for raw_val, expected in cases_horodateur:
+    got = _parse_horodateur(raw_val)
+    status = "OK" if got == expected else "FAIL"
+    print(f"  [{status}] '{raw_val}' -> {got} (attendu {expected})")
+    assert got == expected, raw_val
+
+# ---------------------------------------------------------------------------
+# 4bis. import_responses avec depuis : une réponse antérieure est ignorée,
+# une réponse sans Horodateur reconnaissable est gardée par précaution.
+# ---------------------------------------------------------------------------
+raw_depuis = [
+    {
+        "_row": 2, "Nom et prénom": "Ancienne Réponse",
+        "Horodateur": "2026-10-01T09:00:00.000Z",  # avant le "depuis" -> doit être ignorée
+        "Numéro de téléphone": "0600000001", "Lieu du rendez-vous": "Brest",
+        "Nombre et type d'animaux à voir": "1 chien",
+        "Jours possibles sur la période": "Lundi",
+        "Avez-vous une contrainte d'horaire ferme, ou juste une préférence ?": "aucune",
+        "Remarques complémentaires": "", "Abonnement annuel ?": "",
+    },
+    {
+        "_row": 3, "Nom et prénom": "Nouvelle Réponse",
+        "Horodateur": "2026-11-05T09:00:00.000Z",  # après le "depuis" -> doit être gardée
+        "Numéro de téléphone": "0600000002", "Lieu du rendez-vous": "Brest",
+        "Nombre et type d'animaux à voir": "1 chien",
+        "Jours possibles sur la période": "Mardi",
+        "Avez-vous une contrainte d'horaire ferme, ou juste une préférence ?": "aucune",
+        "Remarques complémentaires": "", "Abonnement annuel ?": "",
+    },
+    {
+        "_row": 4, "Nom et prénom": "Réponse Sans Horodateur",
+        # pas de clé "Horodateur" du tout -> illisible, gardée par précaution
+        "Numéro de téléphone": "0600000003", "Lieu du rendez-vous": "Brest",
+        "Nombre et type d'animaux à voir": "1 chien",
+        "Jours possibles sur la période": "Jeudi",
+        "Avez-vous une contrainte d'horaire ferme, ou juste une préférence ?": "aucune",
+        "Remarques complémentaires": "", "Abonnement annuel ?": "",
+    },
+]
+print("\n=== import_responses avec depuis ===")
+stops_depuis, warns_depuis = import_responses(raw_depuis, five_day_tournee, depuis=date(2026, 11, 1))
+noms = sorted(s.client_name for s in stops_depuis)
+print(f"  clients retenus : {noms}")
+for w in warns_depuis:
+    print(f"  ⚠ {w}")
+assert noms == ["Nouvelle Réponse", "Réponse Sans Horodateur"], noms
+assert any("1 réponse(s) antérieure(s)" in w for w in warns_depuis), "doit signaler le nombre de réponses ignorées"
+assert any("Horodateur' illisible" in w for w in warns_depuis), "doit signaler la réponse sans Horodateur reconnaissable"
+
+# Sans depuis (défaut) : comportement historique inchangé, tout le monde est gardé.
+stops_sans_depuis, warns_sans_depuis = import_responses(raw_depuis, five_day_tournee)
+assert len(stops_sans_depuis) == 3, len(stops_sans_depuis)
+assert not any("antérieure" in w or "illisible" in w for w in warns_sans_depuis)
+print("  OK -- sans 'depuis', comportement historique inchangé (aucun filtre, aucun avertissement lié).")
 
 print("\nOK — tous les cas testés se comportent comme attendu.")

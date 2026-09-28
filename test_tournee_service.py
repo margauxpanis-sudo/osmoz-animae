@@ -391,4 +391,45 @@ semaine2 = sum(len(d["steps"]) for d in exported17["days"] if d["day_index"] > 6
 assert semaine1 <= 3 and semaine2 <= 3, f"chaque semaine doit respecter le plafond de 3 : semaine1={semaine1}, semaine2={semaine2}"
 print(f"OK -- {total_steps17}/5 casées, réparties {semaine1}/{semaine2} entre les deux semaines, plafond respecté partout.\n")
 
+print("=== 18. calculer_tournee : 'depuis' ignore les réponses d'une tournée précédente (formulaire réutilisé) ===")
+raw_depuis_e2e = [
+    {**r, "Horodateur": "2026-10-01T09:00:00.000Z"} for r in raw_responses[:2]  # "anciennes" réponses, avant le cutoff
+] + [
+    {**r, "Horodateur": "2026-10-20T09:00:00.000Z"} for r in raw_responses[2:]  # réponses de la tournée en cours
+]
+exported18, warnings18 = calculer_tournee(
+    raw_depuis_e2e, date(2026, 11, 2), 3, "Penfrat, Camaret-sur-Mer",
+    plafond=12, depuis="2026-10-15", dist_fn_factory=_fake_dist_fn_factory,
+)
+clients18 = sorted(s["client_name"] for d in exported18["days"] for s in d["steps"])
+print(f"  clients casés : {clients18}")
+for w in warnings18:
+    print(f"  ⚠ {w}")
+assert clients18 == ["Caroline", "Les filles au Rulan", "Maïlys"], \
+    f"seules les 3 réponses postérieures au 15/10 doivent être prises en compte : {clients18}"
+assert any("2 réponse(s) antérieure(s)" in w for w in warnings18), \
+    f"avertissement attendu sur les réponses ignorées : {warnings18}"
+print("OK -- les 2 réponses antérieures au 15/10 sont ignorées, les 3 autres sont casées normalement.\n")
+
+print("=== 19. calculer_tournee : sans 'depuis' (défaut), comportement historique inchangé ===")
+exported19, warnings19 = calculer_tournee(
+    raw_depuis_e2e, date(2026, 11, 2), 3, "Penfrat, Camaret-sur-Mer",
+    plafond=12, dist_fn_factory=_fake_dist_fn_factory,
+)
+total_steps19 = sum(len(d["steps"]) for d in exported19["days"])
+assert total_steps19 == 5, f"sans 'depuis', les 5 clients doivent tous être casés : {total_steps19}"
+assert not any("antérieure" in w for w in warnings19), f"aucun avertissement lié à 'depuis' attendu : {warnings19}"
+print("OK -- sans 'depuis', les 5 réponses (dont les 2 'anciennes') sont toutes prises en compte, comme avant.\n")
+
+print("=== 20. calculer_tournee : 'depuis' mal formé rejeté proprement ===")
+try:
+    calculer_tournee(
+        raw_depuis_e2e, date(2026, 11, 2), 3, "Penfrat, Camaret-sur-Mer",
+        plafond=12, depuis="15/10/2026", dist_fn_factory=_fake_dist_fn_factory,
+    )
+    raise AssertionError("TourneeError attendue, rien n'a été levé")
+except TourneeError as e:
+    assert "depuis" in str(e).lower()
+    print(f"OK -- 'depuis' mal formé rejeté proprement : {e}\n")
+
 print("=== TOURNEE_SERVICE (chemin API) VALIDÉ DE BOUT EN BOUT (hors appel réseau réel) ===")

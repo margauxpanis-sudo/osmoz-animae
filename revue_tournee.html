@@ -471,6 +471,13 @@
         </div>
       </div>
       <div class="field-row" style="margin-top:10px;">
+        <div class="field">
+          <label for="depuisInput">Ignorer les réponses reçues avant le</label>
+          <input type="date" id="depuisInput">
+        </div>
+      </div>
+      <p class="hint" style="margin-top:2px;">À utiliser si le même formulaire est réutilisé pour plusieurs tournées : ignore toute réponse antérieure à cette date (colonne "Horodateur" du formulaire), pour ne pas recaser une cliente déjà traitée lors d'une tournée précédente. Laisser vide si tu utilises un formulaire différent à chaque tournée (mode consultations, par exemple).</p>
+      <div class="field-row" style="margin-top:10px;">
         <div class="field grow">
           <label for="datesFermeesInput">Dates ponctuellement fermées (en plus des jours ci-dessus, ex. absence isolée)</label>
           <input type="text" id="datesFermeesInput" placeholder="ex. 14/10/2026, 22/10/2026">
@@ -940,6 +947,7 @@
   var plafondInput = document.getElementById("plafondInput");
   var plafondHebdoInput = document.getElementById("plafondHebdoInput");
   var joursExclusRow = document.getElementById("joursExclusRow");
+  var depuisInput = document.getElementById("depuisInput");
   var datesFermeesInput = document.getElementById("datesFermeesInput");
   var datesDernierRecoursInput = document.getElementById("datesDernierRecoursInput");
   var horairesJoursRows = document.getElementById("horairesJoursRows");
@@ -1044,6 +1052,7 @@
       horaires_jours: horairesJours,
       format_dispo: formatDispoInput.value || "jours_semaine",
       plafond_hebdo: plafondHebdoInput.value ? parseInt(plafondHebdoInput.value, 10) : null,
+      depuis: depuisInput.value || null,
     };
     var payload = {
       export_json: currentRawExport,
@@ -1053,6 +1062,7 @@
       horaires_jours: params.horaires_jours, format_dispo: params.format_dispo,
       plafond_hebdo: params.plafond_hebdo,
       appliquer_plafond_hebdo: false, // premier calcul : jamais forcé d'entrée -- voir recalcPlafondBtn
+      depuis: params.depuis,
     };
     calculerBtn.disabled = true;
     calcStatusEl.textContent = "Calcul en cours… (jusqu'à 1-2 minutes, surtout si le service vient de se réveiller)";
@@ -1105,6 +1115,7 @@
       horaires_jours: lastCalculPayload.horaires_jours, format_dispo: lastCalculPayload.format_dispo,
       plafond_hebdo: lastCalculPayload.plafond_hebdo,
       appliquer_plafond_hebdo: true,
+      depuis: lastCalculPayload.depuis,
     };
     try{
       var result = await callApi("/calculer", payload);

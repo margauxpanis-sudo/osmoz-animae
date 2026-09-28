@@ -152,6 +152,13 @@ class CalculerRequest(BaseModel):
     # côté interface, une fois l'avertissement vu, pas comme le
     # comportement par défaut.
     appliquer_plafond_hebdo: bool = False
+    # Date ISO (ex. "2026-10-01") ignorant toute réponse du formulaire
+    # antérieure à cette date (colonne "Horodateur" ajoutée automatiquement
+    # par Google Forms) -- ajouté le 28 sept. 2026 pour réutiliser le MÊME
+    # formulaire d'une tournée classique à l'autre sans en recréer un
+    # identique à chaque fois. None (défaut) = comportement historique
+    # inchangé, aucun filtre.
+    depuis: str | None = None
 
 
 class RecalculerRequest(BaseModel):
@@ -193,6 +200,7 @@ def calculer(body: CalculerRequest, authorization: str | None = Header(default=N
             body.export_json, start_date, body.jours, body.depot, body.plafond,
             body.jours_exclus, body.dates_fermees, body.horaires_jours, body.format_dispo,
             body.dates_dernier_recours, body.plafond_hebdo, body.appliquer_plafond_hebdo,
+            body.depuis,
         )
     except TourneeError as e:
         raise HTTPException(status_code=422, detail=str(e))
