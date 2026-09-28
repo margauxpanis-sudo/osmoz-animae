@@ -296,4 +296,99 @@ except TourneeError as e:
     assert "Date fermée invalide" in str(e)
     print(f"OK -- date fermée mal formée rejetée proprement : {e}\n")
 
+print("=== 12. build_days : dates_dernier_recours marque le jour SANS l'exclure ===")
+days12 = build_days(date(2026, 11, 2), 3, 12, dates_dernier_recours=["2026-11-04"])
+assert len(days12) == 3, f"les 3 jours doivent tous être présents (contrairement à dates_fermees) : {len(days12)}"
+by_index12 = {d.day_index: d for d in days12}
+assert by_index12[0].dernier_recours is False and by_index12[1].dernier_recours is False
+assert by_index12[2].dernier_recours is True, "04/11 (day_index 2) doit être marqué dernier_recours"
+print("OK -- 04/11 marqué dernier_recours=True, toujours présent dans la liste (pas exclu).\n")
+
+print("=== 13. build_days : une date ne peut pas être à la fois fermée ET dernier recours ===")
+try:
+    build_days(date(2026, 11, 2), 3, 12, dates_fermees=["2026-11-04"], dates_dernier_recours=["2026-11-04"])
+    raise AssertionError("TourneeError attendue, rien n'a été levé")
+except TourneeError as e:
+    assert "fermé" in str(e).lower() and "dernier recours" in str(e).lower()
+    print(f"OK -- contradiction rejetée proprement : {e}\n")
+
+print("=== 14. calculer_tournee : un client sans autre option bascule sur le jour dernier recours ===")
+raw_dernier_recours = [
+    {**r, "Jours possibles sur la période": "Lundi, Mardi"} for r in raw_responses[:4]
+] + [
+    {"_row": 8, "Nom et prénom": "Solange", "Numéro de téléphone": "0607080910",
+     "Lieu du rendez-vous": "Landerneau", "Nombre et type d'animaux à voir": "1 cheval",
+     "Jours possibles sur la période": "Mercredi",
+     "Avez-vous une contrainte d'horaire ferme, ou juste une préférence ?": "aucune",
+     "Remarques complémentaires": ""},
+]
+exported14, warnings14 = calculer_tournee(
+    raw_dernier_recours, date(2026, 11, 2), 3, "Penfrat, Camaret-sur-Mer",
+    plafond=12, dates_dernier_recours=["2026-11-04"], dist_fn_factory=_fake_dist_fn_factory,
+)
+assert not any("non casé" in w.lower() for w in warnings14), f"personne ne doit être perdu : {warnings14}"
+total_steps14 = sum(len(d["steps"]) for d in exported14["days"])
+assert total_steps14 == 5, f"5 clients attendus, trouvé {total_steps14}"
+solange_days = [d["day_index"] for d in exported14["days"] if any(s["client_name"] == "Solange" for s in d["steps"])]
+assert solange_days == [2], f"Solange (seule option = mercredi) doit être sur le jour dernier recours (2) : {solange_days}"
+autres_sur_mercredi = any(
+    s["client_name"] != "Solange" for d in exported14["days"] if d["day_index"] == 2 for s in d["steps"]
+)
+assert not autres_sur_mercredi, "les 4 autres (flexibles lundi/mardi) ne doivent pas basculer sur le mercredi"
+print("OK -- Solange (seule option) placée sur le jour dernier recours, les 4 autres restent sur lundi/mardi.\n")
+
+print("=== 15. calculer_tournee : plafond_hebdo seul (sans l'appliquer) -> avertissement, rien de bloqué ===")
+raw_plafond = [
+    {"_row": 10 + i, "Nom et prénom": f"Cliente{i}", "Numéro de téléphone": f"060{i}000000",
+     "Lieu du rendez-vous": addr, "Nombre et type d'animaux à voir": "1 cheval",
+     "Dates possibles sur la période": "02/11",
+     "Avez-vous une contrainte d'horaire ferme, ou juste une préférence ?": "aucune",
+     "Remarques complémentaires": ""}
+    for i, addr in enumerate(["Bodilis", "Saint-Thégonnec", "Landerneau", "Lannion"])
+]
+exported15, warnings15 = calculer_tournee(
+    raw_plafond, date(2026, 11, 2), 7, "Penfrat, Camaret-sur-Mer",
+    plafond=12, format_dispo="dates_precises", plafond_hebdo=3, dist_fn_factory=_fake_dist_fn_factory,
+)
+total_steps15 = sum(len(d["steps"]) for d in exported15["days"])
+assert total_steps15 == 4, f"sans contrainte appliquée, les 4 doivent rester casées : {total_steps15}"
+assert any("plafond hebdomadaire" in w.lower() and "4" in w for w in warnings15), \
+    f"avertissement attendu mentionnant le dépassement (4 > 3) : {warnings15}"
+print(f"OK -- {total_steps15} clientes casées (rien de bloqué), avertissement affiché : {warnings15[0]}\n")
+
+print("=== 16. calculer_tournee : plafond_hebdo appliqué, sans flexibilité -> dégradation propre (pas de plantage) ===")
+exported16, warnings16 = calculer_tournee(
+    raw_plafond, date(2026, 11, 2), 7, "Penfrat, Camaret-sur-Mer",
+    plafond=12, format_dispo="dates_precises", plafond_hebdo=3, appliquer_plafond_hebdo=True,
+    dist_fn_factory=_fake_dist_fn_factory,
+)
+total_steps16 = sum(len(d["steps"]) for d in exported16["days"])
+assert total_steps16 == 3, f"plafond appliqué, aucune flexibilité (une seule date par cliente) -> 3 casées, 1 sacrifiée : {total_steps16}"
+assert any("non casé" in w.lower() for w in warnings16), f"la cliente sacrifiée doit être signalée : {warnings16}"
+assert not any("anomalie" in w.lower() for w in warnings16), f"le plafond doit être respecté, pas d'anomalie attendue : {warnings16}"
+print(f"OK -- {total_steps16}/4 casées, plafond respecté, cliente restante signalée plutôt que perdue silencieusement.\n")
+
+print("=== 17. calculer_tournee : plafond_hebdo appliqué, AVEC flexibilité -> redistribution automatique vers l'autre semaine ===")
+raw_plafond_flex = raw_plafond[:2] + [  # 2 clientes fixées sur le 02/11 (semaine 1), sous le plafond à elles seules
+    {"_row": 20 + i, "Nom et prénom": f"Flex{i}", "Numéro de téléphone": f"061{i}000000",
+     "Lieu du rendez-vous": addr, "Nombre et type d'animaux à voir": "1 cheval",
+     "Dates possibles sur la période": "02/11, 09/11",  # les deux lundis -- un par semaine
+     "Avez-vous une contrainte d'horaire ferme, ou juste une préférence ?": "aucune",
+     "Remarques complémentaires": ""}
+    for i, addr in enumerate(["Plouaret", "Bodilis", "Lannion"])
+]
+exported17, warnings17 = calculer_tournee(
+    raw_plafond_flex, date(2026, 11, 2), 14, "Penfrat, Camaret-sur-Mer",
+    plafond=12, format_dispo="dates_precises", plafond_hebdo=3, appliquer_plafond_hebdo=True,
+    dist_fn_factory=_fake_dist_fn_factory,
+)
+total_steps17 = sum(len(d["steps"]) for d in exported17["days"])
+assert total_steps17 == 5, f"toutes casables grâce à la flexibilité des Flex* -- aucune perte attendue : {total_steps17}"
+assert not any("non casé" in w.lower() or "anomalie" in w.lower() for w in warnings17), \
+    f"aucun avertissement attendu, la redistribution doit suffire : {warnings17}"
+semaine1 = sum(len(d["steps"]) for d in exported17["days"] if d["day_index"] <= 6)
+semaine2 = sum(len(d["steps"]) for d in exported17["days"] if d["day_index"] > 6)
+assert semaine1 <= 3 and semaine2 <= 3, f"chaque semaine doit respecter le plafond de 3 : semaine1={semaine1}, semaine2={semaine2}"
+print(f"OK -- {total_steps17}/5 casées, réparties {semaine1}/{semaine2} entre les deux semaines, plafond respecté partout.\n")
+
 print("=== TOURNEE_SERVICE (chemin API) VALIDÉ DE BOUT EN BOUT (hors appel réseau réel) ===")

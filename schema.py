@@ -146,6 +146,12 @@ class DayConfig:
     day_start_min: int = 6 * 60
     day_end_min: int = 20 * 60 + 30
     max_span_min: Optional[int] = None  # plafond dur d'heures cumulées (le "rythme")
+    dernier_recours: bool = False  # jour à éviter tant qu'une autre option existe, sans
+        # être fermé pour autant (demande de Margaux, 28 sept. 2026 -- ex. 3e/4e mercredi
+        # du mois chez Ludivine : elle préfère les garder libres, mais accepte d'y caser
+        # une cliente si c'est vraiment la seule option). Voir weekly.py,
+        # FIXED_COST_DERNIER_RECOURS : coût fixe à l'usage de ce jour, pas une exclusion --
+        # le solveur ne l'active que si ça évite de laisser une cliente non casée.
 
 
 @dataclass

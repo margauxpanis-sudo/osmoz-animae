@@ -433,10 +433,26 @@
     </div>
     <details class="advanced">
       <summary>Réglage avancé : plafond, jours à exclure, horaires, mode consultations</summary>
+
+      <div class="field-row" style="margin-top:10px;">
+        <div class="field">
+          <label for="prefillMoisInput">Mois à pré-remplir (rythme fixe de Ludivine)</label>
+          <input type="month" id="prefillMoisInput">
+        </div>
+        <div class="field" style="align-self:flex-end;">
+          <button type="button" class="primary-btn" id="prefillLudivineBtn">Pré-remplir réglages Ludivine</button>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:2px;">Remplit automatiquement, pour le mois choisi, les mercredis fermés (1er/2e du mois), les mercredis "dernier recours" (3e/4e, 9h30-16h), les vendredis ouverts (1er/2e seulement) et les horaires fixes de Ludivine ci-dessous. Rien n'est verrouillé -- vérifie et ajuste avant de calculer. Spécifique au rythme de Ludivine, pas un réglage universel.</p>
+
       <div class="field-row" style="margin-top:10px;">
         <div class="field">
           <label for="plafondInput">Plafond (heures)</label>
           <input type="number" id="plafondInput" min="1" max="24" value="12">
+        </div>
+        <div class="field">
+          <label for="plafondHebdoInput">Plafond hebdomadaire (clientes/semaine)</label>
+          <input type="number" id="plafondHebdoInput" min="1" placeholder="ex. 12 -- laisser vide si non concerné">
         </div>
       </div>
       <div class="field-row" style="margin-top:10px;">
@@ -459,6 +475,13 @@
           <label for="datesFermeesInput">Dates ponctuellement fermées (en plus des jours ci-dessus, ex. absence isolée)</label>
           <input type="text" id="datesFermeesInput" placeholder="ex. 14/10/2026, 22/10/2026">
           <p class="hint" style="margin-top:6px;">Dates précises au format JJ/MM/AAAA, séparées par des virgules. Laisser vide si non concerné.</p>
+        </div>
+      </div>
+      <div class="field-row" style="margin-top:10px;">
+        <div class="field grow">
+          <label for="datesDernierRecoursInput">Dates "dernier recours" (à éviter tant qu'une autre option existe, sans être fermées)</label>
+          <input type="text" id="datesDernierRecoursInput" placeholder="ex. 18/11/2026, 25/11/2026">
+          <p class="hint" style="margin-top:6px;">Dates précises au format JJ/MM/AAAA, séparées par des virgules -- le calcul évite ces dates tant qu'il peut caser tout le monde ailleurs, mais les utilise plutôt que de laisser une cliente non casée. Laisser vide si non concerné.</p>
         </div>
       </div>
       <div class="field-row" style="margin-top:10px;">
@@ -518,6 +541,7 @@
   <div class="warnings" id="warningsBox">
     <strong>⚠ À vérifier avant de faire confiance au calcul :</strong>
     <ul id="warningsList"></ul>
+    <button type="button" class="primary-btn" id="recalcPlafondBtn" style="display:none;margin-top:10px;">Recalculer en respectant le plafond hebdomadaire</button>
   </div>
 
   <div class="stats" id="stats"></div>
@@ -820,7 +844,12 @@
   // arrête d'attendre et on affiche une erreur claire plutôt qu'un silence.
   var CALC_TIMEOUT_MS = 90000;
 
-  async function callApi(path, payload){
+  // method="GET" + payload=null pour /reglages-ludivine (pas de corps à
+  // envoyer, juste des paramètres dans l'URL) -- POST reste le comportement
+  // par défaut pour ne rien changer aux appels existants (/calculer,
+  // /recalculer-nuitees).
+  async function callApi(path, payload, method){
+    method = method || "POST";
     var base = apiBase();
     if(!base){
       throw new Error("Renseigne d'abord l'adresse du service de calcul dans les réglages de connexion.");
@@ -829,16 +858,19 @@
     var controller = new AbortController();
     var timedOut = false;
     var timer = setTimeout(function(){ timedOut = true; controller.abort(); }, CALC_TIMEOUT_MS);
+    var opts = {
+      method: method,
+      headers: {
+        "Authorization": "Bearer " + (apiTokenInput.value || "").trim(),
+      },
+      signal: controller.signal,
+    };
+    if(payload !== null && payload !== undefined){
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(payload);
+    }
     try{
-      resp = await fetch(base + path, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + (apiTokenInput.value || "").trim(),
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
+      resp = await fetch(base + path, opts);
     }catch(networkErr){
       if(timedOut){
         throw new Error("Le calcul prend trop de temps (plus de 90 secondes) -- le service est peut-être surchargé. Réessaie dans une minute ; si ça persiste, préviens Margaux.");
@@ -862,6 +894,7 @@
   var rawExportInput = document.getElementById("rawExportInput");
   var currentRawExport = null; // liste brute {questions: réponses}, envoyée telle quelle à l'API
   var currentParams = null;    // {debut, jours, depot} du dernier calcul réussi -- nécessaire pour "Recalculer après nuitée"
+  var lastCalculPayload = null; // corps complet envoyé au dernier /calculer réussi -- nécessaire pour "Recalculer en respectant le plafond hebdomadaire" (renvoie le même calcul, juste avec appliquer_plafond_hebdo:true)
 
   rawExportInput.addEventListener("change", function(e){
     var file = e.target.files[0];
@@ -905,14 +938,49 @@
   var debutInput = document.getElementById("debutInput");
   var joursInput = document.getElementById("joursInput");
   var plafondInput = document.getElementById("plafondInput");
+  var plafondHebdoInput = document.getElementById("plafondHebdoInput");
   var joursExclusRow = document.getElementById("joursExclusRow");
   var datesFermeesInput = document.getElementById("datesFermeesInput");
+  var datesDernierRecoursInput = document.getElementById("datesDernierRecoursInput");
   var horairesJoursRows = document.getElementById("horairesJoursRows");
   var formatDispoInput = document.getElementById("formatDispoInput");
+  var prefillMoisInput = document.getElementById("prefillMoisInput");
+  var prefillLudivineBtn = document.getElementById("prefillLudivineBtn");
+  var recalcPlafondBtn = document.getElementById("recalcPlafondBtn");
   var recalcBtn = document.getElementById("recalcBtn");
   var agendaBtn = document.getElementById("agendaBtn");
   var agendaStatusEl = document.getElementById("agendaStatus");
   var agendaErrorEl = document.getElementById("agendaError");
+
+  // Mois pré-rempli par défaut = mois en cours, simple confort -- Ludivine
+  // change la valeur avant de cliquer "Pré-remplir réglages Ludivine" si
+  // elle prépare le mois suivant.
+  (function(){
+    var today = new Date();
+    var mm = String(today.getMonth() + 1);
+    if(mm.length < 2) mm = "0" + mm;
+    prefillMoisInput.value = today.getFullYear() + "-" + mm;
+  })();
+
+  // Conversion JJ/MM/AAAA (saisie humaine) <-> AAAA-MM-JJ (attendu par
+  // l'API) -- utilisée à la fois pour "Dates ponctuellement fermées" et
+  // "Dates dernier recours", donc factorisée ici plutôt que dupliquée.
+  function parseDatesFr(raw, label){
+    var out = [];
+    var items = (raw || "").split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+    for(var i = 0; i < items.length; i++){
+      var m = items[i].match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if(!m){
+        throw new Error(label + " invalide : '" + items[i] + "' (attendu JJ/MM/AAAA, ex. 14/10/2026).");
+      }
+      out.push(m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0"));
+    }
+    return out;
+  }
+  function isoToFr(iso){
+    var p = iso.split("-");
+    return p[2] + "/" + p[1] + "/" + p[0];
+  }
 
   calculerBtn.addEventListener("click", async function(){
     calcErrorEl.classList.remove("show");
@@ -929,21 +997,19 @@
     var joursExclus = Array.prototype.slice.call(joursExclusRow.querySelectorAll("input[type=checkbox]:checked"))
       .map(function(cb){ return cb.value; });
 
-    // Dates fermées : saisies en JJ/MM/AAAA (plus naturel pour Ludivine),
-    // converties en AAAA-MM-JJ attendu par l'API (tournee_service.py).
-    // Erreur bloquante affichée AVANT tout appel réseau en cas de format
-    // invalide -- même principe que le reste de l'outil : ne jamais deviner
-    // une date mal saisie.
-    var datesFermees = [];
-    var datesFermeesRaw = (datesFermeesInput.value || "").split(",").map(function(s){ return s.trim(); }).filter(Boolean);
-    for(var di = 0; di < datesFermeesRaw.length; di++){
-      var m = datesFermeesRaw[di].match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if(!m){
-        calcErrorEl.textContent = "Date fermée invalide : '" + datesFermeesRaw[di] + "' (attendu JJ/MM/AAAA, ex. 14/10/2026).";
-        calcErrorEl.classList.add("show");
-        return;
-      }
-      datesFermees.push(m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0"));
+    // Dates fermées / dernier recours : saisies en JJ/MM/AAAA (plus naturel
+    // pour Ludivine), converties en AAAA-MM-JJ attendu par l'API
+    // (tournee_service.py). Erreur bloquante affichée AVANT tout appel
+    // réseau en cas de format invalide -- même principe que le reste de
+    // l'outil : ne jamais deviner une date mal saisie.
+    var datesFermees, datesDernierRecours;
+    try{
+      datesFermees = parseDatesFr(datesFermeesInput.value, "Date fermée");
+      datesDernierRecours = parseDatesFr(datesDernierRecoursInput.value, "Date 'dernier recours'");
+    }catch(err){
+      calcErrorEl.textContent = err.message;
+      calcErrorEl.classList.add("show");
+      return;
     }
 
     // Horaires par jour de semaine : un jour compte seulement si début ET
@@ -974,24 +1040,32 @@
       plafond: parseInt(plafondInput.value, 10) || 12,
       jours_exclus: joursExclus,
       dates_fermees: datesFermees,
+      dates_dernier_recours: datesDernierRecours,
       horaires_jours: horairesJours,
       format_dispo: formatDispoInput.value || "jours_semaine",
+      plafond_hebdo: plafondHebdoInput.value ? parseInt(plafondHebdoInput.value, 10) : null,
+    };
+    var payload = {
+      export_json: currentRawExport,
+      debut: params.debut, jours: params.jours, depot: params.depot, plafond: params.plafond,
+      jours_exclus: params.jours_exclus, dates_fermees: params.dates_fermees,
+      dates_dernier_recours: params.dates_dernier_recours,
+      horaires_jours: params.horaires_jours, format_dispo: params.format_dispo,
+      plafond_hebdo: params.plafond_hebdo,
+      appliquer_plafond_hebdo: false, // premier calcul : jamais forcé d'entrée -- voir recalcPlafondBtn
     };
     calculerBtn.disabled = true;
     calcStatusEl.textContent = "Calcul en cours… (jusqu'à 1-2 minutes, surtout si le service vient de se réveiller)";
     calcStatusEl.classList.add("show");
     try{
-      var result = await callApi("/calculer", {
-        export_json: currentRawExport,
-        debut: params.debut, jours: params.jours, depot: params.depot, plafond: params.plafond,
-        jours_exclus: params.jours_exclus, dates_fermees: params.dates_fermees,
-        horaires_jours: params.horaires_jours, format_dispo: params.format_dispo,
-      });
+      var result = await callApi("/calculer", payload);
       currentParams = { debut: params.debut, jours: params.jours, depot: params.depot };
+      lastCalculPayload = payload; // pour "Recalculer en respectant le plafond hebdomadaire"
       overnight = {}; // nouvelle tournée -> on repart d'une relecture propre
       saveFlags();
       render(result);
       showWarnings(result.warnings);
+      updateRecalcPlafondVisibility(result.warnings);
       recalcBtn.disabled = false;
       agendaBtn.disabled = false;
       calcStatusEl.textContent = "✓ Tournée calculée.";
@@ -1003,6 +1077,92 @@
       calcStatusEl.classList.remove("show");
     }finally{
       calculerBtn.disabled = false;
+    }
+  });
+
+  // --- "Recalculer en respectant le plafond hebdomadaire" : ne réapparaît
+  // que si le dernier calcul a averti d'un dépassement (voir
+  // updateRecalcPlafondVisibility) -- renvoie exactement le même calcul,
+  // juste avec appliquer_plafond_hebdo:true pour poser la vraie contrainte
+  // au solveur (voir tournee_service.calculer_tournee). ---
+  function updateRecalcPlafondVisibility(list){
+    var mentionne = (list || []).some(function(w){ return w.indexOf("plafond hebdomadaire") !== -1; });
+    recalcPlafondBtn.style.display = (mentionne && lastCalculPayload && !lastCalculPayload.appliquer_plafond_hebdo) ? "inline-block" : "none";
+  }
+
+  recalcPlafondBtn.addEventListener("click", async function(){
+    if(!lastCalculPayload){ return; }
+    calcErrorEl.classList.remove("show");
+    recalcPlafondBtn.disabled = true;
+    calcStatusEl.textContent = "Recalcul en cours, plafond hebdomadaire appliqué…";
+    calcStatusEl.classList.add("show");
+    var payload = {
+      export_json: lastCalculPayload.export_json,
+      debut: lastCalculPayload.debut, jours: lastCalculPayload.jours, depot: lastCalculPayload.depot,
+      plafond: lastCalculPayload.plafond,
+      jours_exclus: lastCalculPayload.jours_exclus, dates_fermees: lastCalculPayload.dates_fermees,
+      dates_dernier_recours: lastCalculPayload.dates_dernier_recours,
+      horaires_jours: lastCalculPayload.horaires_jours, format_dispo: lastCalculPayload.format_dispo,
+      plafond_hebdo: lastCalculPayload.plafond_hebdo,
+      appliquer_plafond_hebdo: true,
+    };
+    try{
+      var result = await callApi("/calculer", payload);
+      lastCalculPayload = payload;
+      overnight = {};
+      saveFlags();
+      render(result);
+      showWarnings(result.warnings);
+      updateRecalcPlafondVisibility(result.warnings);
+      recalcBtn.disabled = false;
+      agendaBtn.disabled = false;
+      calcStatusEl.textContent = "✓ Tournée recalculée avec le plafond hebdomadaire appliqué.";
+      calcStatusEl.classList.add("show");
+    }catch(err){
+      calcErrorEl.textContent = err.message;
+      calcErrorEl.classList.add("show");
+      calcStatusEl.classList.remove("show");
+    }finally{
+      recalcPlafondBtn.disabled = false;
+    }
+  });
+
+  // --- "Pré-remplir réglages Ludivine" : appelle GET /reglages-ludivine
+  // pour le mois choisi et remplit les champs dates fermées / dernier
+  // recours / horaires -- juste un point de départ, rien n'est verrouillé
+  // (voir tournee_service.reglages_mensuels_ludivine, spécifique à
+  // Ludivine). ---
+  prefillLudivineBtn.addEventListener("click", async function(){
+    calcErrorEl.classList.remove("show");
+    var m = (prefillMoisInput.value || "").match(/^(\d{4})-(\d{2})$/);
+    if(!m){
+      calcErrorEl.textContent = "Choisis d'abord un mois à pré-remplir (champ juste au-dessus du bouton).";
+      calcErrorEl.classList.add("show");
+      return;
+    }
+    var annee = parseInt(m[1], 10);
+    var mois = parseInt(m[2], 10);
+    prefillLudivineBtn.disabled = true;
+    calcStatusEl.textContent = "Récupération des réglages de Ludivine…";
+    calcStatusEl.classList.add("show");
+    try{
+      var reglages = await callApi("/reglages-ludivine?annee=" + annee + "&mois=" + mois, null, "GET");
+      datesFermeesInput.value = (reglages.dates_fermees || []).map(isoToFr).join(", ");
+      datesDernierRecoursInput.value = (reglages.dates_dernier_recours || []).map(isoToFr).join(", ");
+      Array.prototype.forEach.call(horairesJoursRows.querySelectorAll(".horaire-jour-row"), function(row){
+        var jour = row.getAttribute("data-jour");
+        var h = reglages.horaires_jours && reglages.horaires_jours[jour];
+        row.querySelector(".horaire-debut").value = h ? h.debut : "";
+        row.querySelector(".horaire-fin").value = h ? h.fin : "";
+      });
+      calcStatusEl.textContent = "✓ Réglages de Ludivine pré-remplis pour " + mois + "/" + annee + " -- vérifie avant de calculer, rien n'est verrouillé.";
+      calcStatusEl.classList.add("show");
+    }catch(err){
+      calcErrorEl.textContent = err.message;
+      calcErrorEl.classList.add("show");
+      calcStatusEl.classList.remove("show");
+    }finally{
+      prefillLudivineBtn.disabled = false;
     }
   });
 
@@ -1041,6 +1201,10 @@
       });
       render(result);
       showWarnings(result.warnings);
+      // Le recalcul après nuitée ne repose jamais le plafond hebdomadaire
+      // (voir recalculer_apres_nuitees, qui ne touche qu'ordre/horaires) --
+      // le bouton du calcul précédent n'a plus de sens ici.
+      recalcPlafondBtn.style.display = "none";
       agendaBtn.disabled = false;
       calcStatusEl.textContent = "✓ Recalcul terminé.";
       calcStatusEl.classList.add("show");

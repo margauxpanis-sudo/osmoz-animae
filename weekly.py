@@ -33,6 +33,42 @@ produit qu'à la toute fin de la dichotomie de solve_week_balanced (au
 plafond le plus large) ; avant le 25 sept. 2026 il levait une exception
 brute (RuntimeError) au lieu de renvoyer un résultat partiel exploitable —
 corrigé le même jour (voir solve_week_balanced).
+
+JOUR "DERNIER RECOURS" (demande de Margaux, 28 sept. 2026 -- ex. les 3e/4e
+mercredis du mois chez Ludivine, qu'elle préfère garder libres sans les
+fermer complètement) : DayConfig.dernier_recours=True n'exclut pas le jour
+(contrairement à jours_exclus/dates_fermees, qui l'omettent purement de la
+liste -- voir tournee_service.build_days), il le rend seulement coûteux à
+utiliser via routing.SetFixedCostOfVehicle. Validé par prototype isolé avant
+intégration (scratchpad/proto_last_resort.py, 28 sept. 2026) : avec des
+clientes flexibles ET des clientes n'ayant QUE ce jour comme option, le
+moteur remplit les autres jours en premier et ne bascule sur le jour
+"dernier recours" que si c'est la seule façon de ne perdre personne.
+FIXED_COST_DERNIER_RECOURS doit rester strictement inférieur à BIG_PENALTY
+(coût de laisser une cliente non casée) -- sinon le moteur préférerait
+sacrifier une cliente plutôt que d'ouvrir le jour de secours, l'inverse de
+l'intention de Ludivine.
+
+PLAFOND HEBDOMADAIRE (demande de Margaux, 28 sept. 2026 -- "max 12
+clientes/semaine" chez Ludivine, jamais respecté nulle part avant ça : le
+réglage "plafond" existant limite l'étalement horaire d'un JOUR, pas un
+nombre de clientes sur une SEMAINE, aucun rapport). groupes_semaine (listes
+d'indices de véhicules appartenant à la même semaine calendaire, calculées
+côté tournee_service.py à partir des vraies dates -- weekly.py ne connaît
+pas start_date) + plafond_hebdo : une dimension OR-Tools "Count" (+1 par
+vraie visite client, 0 pour le dépôt) donne le nombre de clientes par
+véhicule (jour) ; une contrainte solveur plafonne la SOMME de ces compteurs
+sur les véhicules d'un même groupe. Validé par prototype isolé avant
+intégration (scratchpad/proto_weekly_cap.py, 28 sept. 2026) : avec de la
+flexibilité (clientes ayant coché plusieurs jours dans des semaines
+différentes), le moteur déplace lui-même le surplus vers la semaine la
+moins chargée ; sans flexibilité, il dégrade proprement (clientes non
+casées et signalées, comme le mécanisme "abonnement annuel" ci-dessus) au
+lieu de planter. Volontairement appliqué seulement à la demande (paramètre
+optionnel) -- le calcul par défaut reste inchangé, sans cette dimension
+supplémentaire ; voir tournee_service.calculer_tournee pour le choix entre
+avertissement passif et contrainte dure appliquée sur demande (bouton côté
+interface).
 """
 
 from __future__ import annotations
@@ -59,11 +95,18 @@ def solve_week(
     time_limit_s: int = 15,
     span_cost_coef: int = 100,
     verbose: bool = True,
+    groupes_semaine: list[list[int]] | None = None,
+    plafond_hebdo: int | None = None,
 ) -> WeekResult:
     """Affecte chaque client à l'un de ses jours possibles, calcule l'ordre
     et les horaires — plafond dur par jour, mais sans étalement actif (voir
     solve_week_balanced pour ça). dist_fn(a_id, b_id) reçoit DEPOT_ID pour
-    le dépôt et les Stop.id pour les clients."""
+    le dépôt et les Stop.id pour les clients.
+
+    groupes_semaine/plafond_hebdo (voir docstring du module) : optionnels,
+    tous les deux nécessaires ensemble pour activer le plafond hebdomadaire
+    -- groupes_semaine est une liste de listes d'INDICES DE VÉHICULE (la
+    position dans `days`, pas day_index calendaire)."""
     n_days = len(days)
     day_by_index = {d.day_index: d for d in days}
 
@@ -113,6 +156,8 @@ def solve_week(
 
     # Chaque véhicule = un jour -> ses propres horaires de dépôt, et un plafond
     # dur d'heures cumulées si défini (le "rythme").
+    FIXED_COST_DERNIER_RECOURS = 1_000_000  # < BIG_PENALTY (10M, ci-dessous) : ouvrir le
+        # jour de secours coûte toujours moins cher que de laisser une cliente non casée.
     for v, day in enumerate(days):
         start_idx = routing.Start(v)
         end_idx = routing.End(v)
@@ -121,6 +166,8 @@ def solve_week(
             routing.solver().Add(
                 time_dim.CumulVar(end_idx) - time_dim.CumulVar(start_idx) <= day.max_span_min
             )
+        if day.dernier_recours:
+            routing.SetFixedCostOfVehicle(FIXED_COST_DERNIER_RECOURS, v)
 
     # Chaque copie de nœud n'est autorisée que sur le véhicule (jour) qu'elle représente.
     # (SetAllowedVehiclesForIndex plante avec cette version d'OR-Tools (9.15) —
@@ -162,6 +209,22 @@ def solve_week(
         penalty = PRIORITY_PENALTY if clients_by_id[client_id].abonnement_annuel else BIG_PENALTY
         # max_cardinality=1 : au plus une des copies (jours possibles) est visitée.
         routing.AddDisjunction(solver_indices, penalty, 1)
+
+    # Plafond hebdomadaire (voir docstring du module) -- dimension "Count"
+    # (+1 par vraie visite, 0 pour le dépôt), puis une contrainte solveur qui
+    # plafonne la SOMME de ces compteurs sur les véhicules d'une même semaine.
+    if groupes_semaine and plafond_hebdo is not None:
+        def count_callback(from_index, to_index):
+            t = manager.IndexToNode(to_index)
+            return 0 if t == 0 else 1
+
+        count_cb = routing.RegisterTransitCallback(count_callback)
+        routing.AddDimension(count_cb, 0, len(clients) + 1, True, "Count")  # fix_start_cumul_to_zero=True
+        count_dim = routing.GetDimensionOrDie("Count")
+        solver_ = routing.solver()
+        for groupe in groupes_semaine:
+            total = solver_.Sum([count_dim.CumulVar(routing.End(v)) for v in groupe])
+            solver_.Add(total <= plafond_hebdo)
 
     for v in range(n_days):
         routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(routing.End(v)))
@@ -236,6 +299,8 @@ def solve_week_balanced(
     final_time_limit_s: int = 10,
     resolution_min: int = 15,
     span_cost_coef: int = 100,
+    groupes_semaine: list[list[int]] | None = None,
+    plafond_hebdo: int | None = None,
 ) -> WeekResult:
     """Étalement actif de la charge (décision Margaux, 24 sept. 2026) : plutôt
     que de faire confiance à un coût "mou" dont OR-Tools s'est révélé ne PAS
@@ -263,8 +328,18 @@ def solve_week_balanced(
     ceiling = min(hard_caps)
 
     def try_cap(cap: int) -> WeekResult:
-        trial_days = [DayConfig(d.day_index, d.label, d.day_start_min, d.day_end_min, max_span_min=cap) for d in days]
-        return solve_week(trial_days, clients, dist_fn, depot_label, search_time_limit_s, span_cost_coef, verbose=False)
+        # dernier_recours=d.dernier_recours reporté explicitement -- sinon silencieusement
+        # perdu à chaque essai de la dichotomie, même piège que day_start_min/day_end_min
+        # déjà documenté pour horaires_jours (voir tournee_service.build_days).
+        trial_days = [
+            DayConfig(d.day_index, d.label, d.day_start_min, d.day_end_min,
+                      max_span_min=cap, dernier_recours=d.dernier_recours)
+            for d in days
+        ]
+        return solve_week(
+            trial_days, clients, dist_fn, depot_label, search_time_limit_s, span_cost_coef, verbose=False,
+            groupes_semaine=groupes_semaine, plafond_hebdo=plafond_hebdo,
+        )
 
     # Le plafond ne peut de toute façon jamais descendre sous le service+trajet
     # du client le plus lourd tout seul : borne basse raisonnable pour ne pas
@@ -284,12 +359,19 @@ def solve_week_balanced(
         # crash -- exactement le rôle de Stop.abonnement_annuel /
         # PRIORITY_PENALTY dans solve_week : ce sont alors en priorité les
         # clients SANS abonnement annuel qui se retrouvent non casés.
-        final_days = [DayConfig(d.day_index, d.label, d.day_start_min, d.day_end_min, max_span_min=hi) for d in days]
+        final_days = [
+            DayConfig(d.day_index, d.label, d.day_start_min, d.day_end_min,
+                      max_span_min=hi, dernier_recours=d.dernier_recours)
+            for d in days
+        ]
         print(
             f"⚠ Même le plafond le plus large fourni ({fmt(hi)}) ne suffit pas à caser tous les clients — "
             "les clients sans abonnement annuel sont sacrifiés en priorité (à traiter à la main)."
         )
-        return solve_week(final_days, clients, dist_fn, depot_label, final_time_limit_s, span_cost_coef, verbose=True)
+        return solve_week(
+            final_days, clients, dist_fn, depot_label, final_time_limit_s, span_cost_coef, verbose=True,
+            groupes_semaine=groupes_semaine, plafond_hebdo=plafond_hebdo,
+        )
 
     best_cap = hi
     while hi - lo > resolution_min:
@@ -301,5 +383,12 @@ def solve_week_balanced(
             lo = mid + 1
 
     print(f"Plafond minimal trouvé pour tout caser : {fmt(best_cap)} (au lieu du plafond fourni {fmt(ceiling)})")
-    final_days = [DayConfig(d.day_index, d.label, d.day_start_min, d.day_end_min, max_span_min=best_cap) for d in days]
-    return solve_week(final_days, clients, dist_fn, depot_label, final_time_limit_s, span_cost_coef, verbose=True)
+    final_days = [
+        DayConfig(d.day_index, d.label, d.day_start_min, d.day_end_min,
+                  max_span_min=best_cap, dernier_recours=d.dernier_recours)
+        for d in days
+    ]
+    return solve_week(
+        final_days, clients, dist_fn, depot_label, final_time_limit_s, span_cost_coef, verbose=True,
+        groupes_semaine=groupes_semaine, plafond_hebdo=plafond_hebdo,
+    )

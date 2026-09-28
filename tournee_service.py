@@ -67,19 +67,25 @@ def _parse_hhmm(s: str) -> int:
         raise TourneeError(f"Horaire invalide : '{s}' (attendu HH:MM, ex. '09:00').")
 
 
-def _parse_dates_fermees(dates_fermees: list[str] | None) -> set[date]:
+def _parse_iso_dates(dates: list[str] | None, label: str) -> set[date]:
     """Chaînes ISO ("AAAA-MM-JJ") -> objets date, avec erreur métier claire
-    sur tout format invalide plutôt qu'un plantage brut."""
+    sur tout format invalide plutôt qu'un plantage brut. `label` sert
+    uniquement au message d'erreur (ex. "Date fermée", "Date 'dernier
+    recours'"), pour rester précis sur QUEL réglage est en cause."""
     parsed: set[date] = set()
-    for s in dates_fermees or []:
+    for s in dates or []:
         s = s.strip()
         if not s:
             continue
         try:
             parsed.add(date.fromisoformat(s))
         except ValueError:
-            raise TourneeError(f"Date fermée invalide : '{s}' (attendu AAAA-MM-JJ).")
+            raise TourneeError(f"{label} invalide : '{s}' (attendu AAAA-MM-JJ).")
     return parsed
+
+
+def _parse_dates_fermees(dates_fermees: list[str] | None) -> set[date]:
+    return _parse_iso_dates(dates_fermees, "Date fermée")
 
 
 def _excluded_day_indices(
@@ -135,6 +141,7 @@ def build_days(
     jours_exclus: list[str] | None = None,
     dates_fermees: list[str] | None = None,
     horaires_jours: dict[str, tuple[int, int]] | None = None,
+    dates_dernier_recours: list[str] | None = None,
 ) -> list[DayConfig]:
     """Un DayConfig par jour calendaire de la période, SAUF les jours
     exclus par jours_exclus ou dates_fermees (voir _excluded_day_indices) :
@@ -162,8 +169,28 @@ def build_days(
     survit à l'équilibrage de solve_week_balanced : sa dichotomie ne
     touche QUE max_span_min, elle reconstruit chaque DayConfig d'essai en
     reprenant explicitement day_start_min/day_end_min du jour d'origine
-    (voir weekly.py, try_cap)."""
+    (voir weekly.py, try_cap).
+
+    dates_dernier_recours (ex. ["2026-10-21"], demande de Margaux, 28 sept.
+    2026) : contrairement à dates_fermees, ces jours ne sont PAS omis de la
+    liste renvoyée -- ils restent proposables, mais marqués
+    DayConfig.dernier_recours=True (voir weekly.py : coûteux à utiliser pour
+    le solveur, pas interdit). Une date ne peut pas être à la fois fermée et
+    "dernier recours" -- ce serait une contradiction jamais devinée
+    silencieusement, TourneeError levée à la place."""
     excluded = _excluded_day_indices(start_date, n_days, jours_exclus, dates_fermees)
+    dernier_recours_dates = _parse_iso_dates(dates_dernier_recours, "Date 'dernier recours'")
+    dernier_recours_idx = {
+        i for i in range(n_days)
+        if (start_date + timedelta(days=i)) in dernier_recours_dates
+    }
+    conflit = dernier_recours_idx & excluded
+    if conflit:
+        raise TourneeError(
+            f"Jour(s) à la fois fermé(s) et 'dernier recours' : "
+            f"{_format_excluded_days(start_date, conflit)} -- choisis l'un ou l'autre, pas les deux."
+        )
+
     horaires = horaires_jours or {}
     days = []
     for i in range(n_days):
@@ -178,9 +205,68 @@ def build_days(
             day_index=i,
             label=f"{weekday_name.capitalize()} {d.strftime('%d/%m')}",
             max_span_min=max_span_h * 60,
+            dernier_recours=(i in dernier_recours_idx),
             **kwargs,
         ))
     return days
+
+
+def _semaine_key(start_date: date, day_index: int) -> tuple[int, int]:
+    """(année ISO, numéro de semaine ISO) pour ce jour -- une vraie semaine
+    calendaire lundi-dimanche, pas une tranche de 7 jours depuis start_date
+    (qui ne commence quasiment jamais un lundi, ex. le 1er d'un mois)."""
+    iso_year, iso_week, _ = (start_date + timedelta(days=day_index)).isocalendar()
+    return (iso_year, iso_week)
+
+
+def _groupes_par_semaine(start_date: date, days: list[DayConfig]) -> dict[tuple[int, int], list[int]]:
+    """{clé semaine ISO: [day_index, ...]} à partir des jours RÉELLEMENT
+    construits par build_days (donc déjà sans les jours exclus). Sert à la
+    fois à construire les groupes d'indices de véhicule pour le solveur
+    (plafond hebdomadaire, voir weekly.py) et, après coup, à recompter le
+    nombre réel de clientes par semaine pour l'avertissement."""
+    groupes: dict[tuple[int, int], list[int]] = {}
+    for d in days:
+        groupes.setdefault(_semaine_key(start_date, d.day_index), []).append(d.day_index)
+    return groupes
+
+
+def reglages_mensuels_ludivine(annee: int, mois: int) -> dict:
+    """Calcule automatiquement les réglages du rythme FIXE de Ludivine pour
+    les tournées bretonnes classiques (communiqué par Margaux le 28 sept.
+    2026) : mercredi fermé les 1er/2e du mois, ouvert en dernier recours
+    (9h30-16h) les 3e/4e (et 5e si le mois en compte un) ; vendredi ouvert
+    (9h30-12h) uniquement les 1er/2e du mois, fermé au-delà ; lundi/mardi/
+    jeudi à horaires fixes, sans exception de date.
+
+    Spécifique au rythme de Ludivine -- NE PAS appliquer tel quel à une
+    autre professionnelle (ex. Alexia, YourGoodCom) qui aurait un rythme
+    différent ; le champ exposé côté interface doit rester un remplissage
+    explicite, jamais un défaut silencieux.
+
+    Remplace le calcul de dates à la main (source d'erreur déjà identifiée
+    le 28 sept. 2026) par une règle fixe, déterministe, recalculée
+    automatiquement pour n'importe quel mois."""
+    import calendar
+
+    _, n_jours_mois = calendar.monthrange(annee, mois)
+    mercredis = [date(annee, mois, j) for j in range(1, n_jours_mois + 1) if date(annee, mois, j).weekday() == 2]
+    vendredis = [date(annee, mois, j) for j in range(1, n_jours_mois + 1) if date(annee, mois, j).weekday() == 4]
+
+    dates_fermees = [d.isoformat() for d in mercredis[:2]] + [d.isoformat() for d in vendredis[2:]]
+    dates_dernier_recours = [d.isoformat() for d in mercredis[2:]]
+
+    return {
+        "dates_fermees": dates_fermees,
+        "dates_dernier_recours": dates_dernier_recours,
+        "horaires_jours": {
+            "lundi": {"debut": "09:30", "fin": "13:00"},
+            "mardi": {"debut": "09:30", "fin": "17:00"},
+            "mercredi": {"debut": "09:30", "fin": "16:00"},
+            "jeudi": {"debut": "09:30", "fin": "17:00"},
+            "vendredi": {"debut": "09:30", "fin": "12:00"},
+        },
+    }
 
 
 def export_for_interface(day_results: dict, clients_by_id: dict) -> dict:
@@ -245,6 +331,9 @@ def calculer_tournee(
     dates_fermees: list[str] | None = None,
     horaires_jours: dict[str, dict[str, str]] | None = None,
     format_dispo: str = "jours_semaine",
+    dates_dernier_recours: list[str] | None = None,
+    plafond_hebdo: int | None = None,
+    appliquer_plafond_hebdo: bool = False,
     dist_fn_factory: DistFnFactory = _default_dist_fn_factory,
 ) -> tuple[dict, list[str]]:
     """Premier calcul complet : export brut du formulaire -> tournée
@@ -277,6 +366,19 @@ def calculer_tournee(
     horaires de journée propres à un jour de semaine, pour un rythme
     irrégulier (mode consultations) -- voir build_days. Un jour de semaine
     absent garde les horaires par défaut (6h-20h30).
+
+    dates_dernier_recours (ex. ["2026-10-21"], demande de Margaux, 28 sept.
+    2026) : jours à éviter tant qu'une autre option existe, sans être
+    fermés pour autant (voir build_days/weekly.py).
+
+    plafond_hebdo/appliquer_plafond_hebdo (demande de Margaux, 28 sept.
+    2026, ex. 12 clientes/semaine chez Ludivine) : plafond_hebdo seul
+    (appliquer_plafond_hebdo=False, défaut) ne fait QU'avertir après coup
+    si une semaine dépasse ce nombre -- le calcul reste rapide et
+    inchangé. appliquer_plafond_hebdo=True relance avec la vraie
+    contrainte posée au solveur (voir weekly.py) : pensé comme un second
+    appel déclenché par un bouton côté interface une fois l'avertissement
+    vu, pas comme le comportement par défaut.
 
     Renvoie (résultat exportable pour l'interface, avertissements à
     afficher). Lève TourneeError pour tout échec métier."""
@@ -331,7 +433,7 @@ def calculer_tournee(
     if not stops:
         raise TourneeError("Aucun client planifiable dans cet export -- rien à calculer.")
 
-    days = build_days(start_date, n_days, plafond, jours_exclus, dates_fermees, horaires_min)
+    days = build_days(start_date, n_days, plafond, jours_exclus, dates_fermees, horaires_min, dates_dernier_recours)
     if not days:
         raise TourneeError(
             f"Tous les jours de cette tournée ({n_days} jour(s) à partir du "
@@ -346,7 +448,17 @@ def calculer_tournee(
     except OrsError as e:
         raise TourneeError(f"Erreur cartographie : {e}") from e
 
-    result = solve_week_balanced(days, stops, dist_fn, depot_label=depot)
+    groupes_par_semaine = _groupes_par_semaine(start_date, days)  # {clé semaine: [day_index,...]}
+    groupes_vehicules = None
+    if appliquer_plafond_hebdo and plafond_hebdo is not None:
+        day_index_to_v = {d.day_index: v for v, d in enumerate(days)}
+        groupes_vehicules = [[day_index_to_v[di] for di in di_list] for di_list in groupes_par_semaine.values()]
+
+    result = solve_week_balanced(
+        days, stops, dist_fn, depot_label=depot,
+        groupes_semaine=groupes_vehicules,
+        plafond_hebdo=(plafond_hebdo if appliquer_plafond_hebdo else None),
+    )
 
     clients_by_id = {s.id: s for s in stops}
     if not result.feasible:
@@ -360,6 +472,32 @@ def calculer_tournee(
         if any(s.abonnement_annuel for s in missing_stops):
             msg += " (⭐ = abonnement annuel, normalement protégé en priorité)"
         warnings.append(msg)
+
+    # Avertissement plafond hebdomadaire -- vérifié après coup QUE la
+    # contrainte ait été appliquée ou non (jamais fait confiance aveuglément
+    # à la contrainte posée au solveur, même principe que le reste de
+    # l'outil) : si appliquer_plafond_hebdo était False, c'est le seul signal
+    # que Ludivine reçoit ; si True, ce cas ne devrait structurellement
+    # jamais se produire -- le signaler quand même comme une anomalie s'il
+    # apparaît.
+    if plafond_hebdo is not None:
+        for day_idxs in groupes_par_semaine.values():
+            total = sum(len(result.day_results[di].steps) for di in day_idxs if di in result.day_results)
+            if total > plafond_hebdo:
+                dmin = start_date + timedelta(days=min(day_idxs))
+                dmax = start_date + timedelta(days=max(day_idxs))
+                periode = f"semaine du {dmin.strftime('%d/%m')} au {dmax.strftime('%d/%m')}"
+                if appliquer_plafond_hebdo:
+                    warnings.append(
+                        f"⚠ Anomalie : {periode} dépasse le plafond hebdomadaire ({total} > {plafond_hebdo}) "
+                        "alors que la contrainte était appliquée -- ce cas ne devrait pas se produire, à signaler."
+                    )
+                else:
+                    warnings.append(
+                        f"{periode.capitalize()} : {total} clientes, au-dessus du plafond hebdomadaire "
+                        f"({plafond_hebdo}). Relance le calcul avec le plafond hebdomadaire appliqué pour "
+                        "rééquilibrer automatiquement si besoin."
+                    )
 
     exported = export_for_interface(result.day_results, clients_by_id)
     return exported, warnings

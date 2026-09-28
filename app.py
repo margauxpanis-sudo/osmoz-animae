@@ -64,7 +64,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from tournee_service import TourneeError, calculer_tournee, recalculer_apres_nuitees
+from tournee_service import TourneeError, calculer_tournee, recalculer_apres_nuitees, reglages_mensuels_ludivine
 
 app = FastAPI(title="Osmoz Animae — moteur de tournée")
 
@@ -134,6 +134,24 @@ class CalculerRequest(BaseModel):
     # cocher des dates précises du mois) -- voir
     # tournee_service._JOURS_FIELD_BY_FORMAT et calculer_tournee.
     format_dispo: str = "jours_semaine"
+    # Dates ISO (ex. ["2026-11-05"]) à éviter tant qu'une autre option
+    # existe, SANS être fermées pour autant (ajouté le 28 sept. 2026, ex.
+    # les 3e/4e mercredis du mois chez Ludivine -- voir tournee_service.
+    # build_days et weekly.py). Liste vide par défaut = comportement
+    # historique inchangé.
+    dates_dernier_recours: list[str] = Field(default_factory=list)
+    # Plafond hebdomadaire optionnel (ex. 12 clientes/semaine chez
+    # Ludivine, ajouté le 28 sept. 2026 -- sans rapport avec `plafond`
+    # ci-dessus, qui limite les HEURES d'une journée). None (défaut) =
+    # aucune vérification. Seul, sans appliquer_plafond_hebdo, ne fait
+    # qu'avertir après coup si une semaine le dépasse -- le calcul par
+    # défaut reste inchangé, rapide, sans cette dimension supplémentaire.
+    plafond_hebdo: int | None = None
+    # True = relance avec la vraie contrainte posée au solveur (voir
+    # weekly.py) -- pensé comme un second appel déclenché par un bouton
+    # côté interface, une fois l'avertissement vu, pas comme le
+    # comportement par défaut.
+    appliquer_plafond_hebdo: bool = False
 
 
 class RecalculerRequest(BaseModel):
@@ -174,11 +192,29 @@ def calculer(body: CalculerRequest, authorization: str | None = Header(default=N
         exported, warnings = calculer_tournee(
             body.export_json, start_date, body.jours, body.depot, body.plafond,
             body.jours_exclus, body.dates_fermees, body.horaires_jours, body.format_dispo,
+            body.dates_dernier_recours, body.plafond_hebdo, body.appliquer_plafond_hebdo,
         )
     except TourneeError as e:
         raise HTTPException(status_code=422, detail=str(e))
     exported["warnings"] = warnings
     return exported
+
+
+@app.get("/reglages-ludivine")
+def reglages_ludivine(annee: int, mois: int, authorization: str | None = Header(default=None)):
+    """Calcule automatiquement les dates fermées / dernier recours / horaires
+    du rythme FIXE de Ludivine pour un mois donné (voir tournee_service.
+    reglages_mensuels_ludivine) -- pour que le bouton "Pré-remplir réglages
+    Ludivine" de l'interface n'ait plus jamais besoin de calculer une date à
+    la main. Spécifique à Ludivine, PAS un réglage par défaut pour une autre
+    professionnelle (ex. Alexia) qui aurait un rythme différent -- ne
+    remplace rien tant que le bouton n'est pas cliqué. Protégé par le même
+    jeton que /calculer, même si le résultat ne contient aucune donnée
+    personnelle (cohérence du modèle de sécurité, rien de plus)."""
+    _check_token(authorization)
+    if not (1 <= mois <= 12):
+        raise HTTPException(status_code=400, detail="Mois invalide (attendu 1-12).")
+    return reglages_mensuels_ludivine(annee, mois)
 
 
 @app.post("/recalculer-nuitees")
